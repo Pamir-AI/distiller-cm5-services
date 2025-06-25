@@ -9,7 +9,7 @@ Wants=NetworkManager.service
 Type=simple
 User=root
 Group=root
-WorkingDirectory=/home/distiller/distiller-cm5-services
+WorkingDirectory=/opt/distiller-cm5-services
 ExecStartPre=/bin/sleep 10
 ExecStart=/usr/bin/python3 wifi_setup_service.py
 Restart=on-failure
@@ -18,7 +18,7 @@ TimeoutStartSec=60
 TimeoutStopSec=30
 
 # Environment
-Environment=PYTHONPATH=/home/distiller/distiller-cm5-services
+Environment=PYTHONPATH=/opt/distiller-cm5-services
 Environment=WIFI_HOTSPOT_SSID=SetupWiFi
 Environment=WIFI_HOTSPOT_PASSWORD=setupwifi123
 
