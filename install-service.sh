@@ -1,14 +1,19 @@
 #!/bin/bash
 
-# WiFi Setup Service Installation Script
+# Distiller WiFi Service Installation Script
+# Installs the WiFi setup service as a systemd service
 
 set -e
 
-SERVICE_NAME="wifi-setup"
-SERVICE_FILE="wifi-setup.service"
+# Configuration
+SERVICE_NAME="distiller-wifi"
+SERVICE_FILE="distiller-wifi.service"
+SERVICE_USER="root"
+INSTALL_DIR="/opt/distiller-wifi"
 SYSTEMD_DIR="/etc/systemd/system"
+CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "Installing WiFi Setup Service..."
+echo "Installing Distiller WiFi Service..."
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
@@ -17,6 +22,27 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Create installation directory
+echo "Creating installation directory: $INSTALL_DIR"
+mkdir -p "$INSTALL_DIR"
+
+# Copy service files
+echo "Copying service files..."
+cp "$CURRENT_DIR/distiller_wifi_service.py" "$INSTALL_DIR/"
+cp -r "$CURRENT_DIR/network" "$INSTALL_DIR/"
+cp -r "$CURRENT_DIR/templates" "$INSTALL_DIR/"
+cp -r "$CURRENT_DIR/static" "$INSTALL_DIR/"
+cp "$CURRENT_DIR/requirements.txt" "$INSTALL_DIR/"
+
+# Set permissions
+echo "Setting permissions..."
+chown -R $SERVICE_USER:$SERVICE_USER "$INSTALL_DIR"
+chmod +x "$INSTALL_DIR/distiller_wifi_service.py"
+
+# Install Python dependencies
+echo "Installing Python dependencies..."
+pip3 install -r "$INSTALL_DIR/requirements.txt"
+
 # Check if service file exists
 if [ ! -f "$SERVICE_FILE" ]; then
     echo "Error: $SERVICE_FILE not found in current directory"
@@ -24,33 +50,27 @@ if [ ! -f "$SERVICE_FILE" ]; then
 fi
 
 # Copy service file to systemd directory
-echo "Copying service file to $SYSTEMD_DIR/"
+echo "Installing systemd service..."
 cp "$SERVICE_FILE" "$SYSTEMD_DIR/"
 
 # Set proper permissions
 chmod 644 "$SYSTEMD_DIR/$SERVICE_FILE"
 
-# Reload systemd daemon
-echo "Reloading systemd daemon..."
+# Reload systemd and enable service
+echo "Configuring systemd service..."
 systemctl daemon-reload
-
-# Enable the service
-echo "Enabling $SERVICE_NAME service..."
 systemctl enable "$SERVICE_NAME"
 
-# Check service status
-echo "Service status:"
-systemctl status "$SERVICE_NAME" --no-pager || true
-
 echo ""
-echo "WiFi Setup Service installed successfully!"
+echo "Installation complete!"
 echo ""
-echo "Commands to manage the service:"
-echo "  Start:   sudo systemctl start $SERVICE_NAME"
-echo "  Stop:    sudo systemctl stop $SERVICE_NAME"
-echo "  Status:  sudo systemctl status $SERVICE_NAME"
-echo "  Logs:    sudo journalctl -u $SERVICE_NAME -f"
-echo "  Disable: sudo systemctl disable $SERVICE_NAME"
+echo "To start the service:"
+echo "  sudo systemctl start $SERVICE_NAME"
 echo ""
-echo "The service will now start automatically at boot."
-echo "To start it now, run: sudo systemctl start $SERVICE_NAME" 
+echo "To check service status:"
+echo "  sudo systemctl status $SERVICE_NAME"
+echo ""
+echo "To view logs:"
+echo "  sudo journalctl -u $SERVICE_NAME -f"
+echo ""
+echo "The service will start automatically on boot." 

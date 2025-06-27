@@ -1,44 +1,260 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WiFi Setup</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Distiller WiFi Setup</title>
+    <link rel="icon" href="{{ url_for('static', filename='images/pamir-logo-01.svg') }}">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+            background: #ffffff;
+            color: #000000;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.4;
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: #ffffff;
+            border: 3px solid #000000;
+            border-radius: 0;
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #000000;
+            color: #ffffff;
+            padding: 20px;
+            text-align: center;
+            border-bottom: 3px solid #000000;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .header .subtitle {
+            margin: 8px 0 0 0;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .content {
+            padding: 30px 20px;
+        }
+        
+        .network-list {
+            margin-bottom: 20px;
+        }
+        
+        .network-btn {
+            display: block;
+            width: 100%;
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            background: #ffffff;
+            border: 2px solid #000000;
+            text-decoration: none;
+            color: #000000;
+            transition: all 0.2s ease;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            position: relative;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .network-btn:hover {
+            background: #f0f0f0;
+            text-decoration: none;
+            color: #000000;
+        }
+        
+        .network-btn.encrypted::before {
+            content: "[LOCK]";
+            margin-right: 10px;
+            font-size: 10px;
+        }
+        
+        .network-btn .signal {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            color: #666666;
+            font-family: monospace;
+        }
+        
+        .manual-form {
+            background: #f8f8f8;
+            padding: 20px;
+            border: 2px solid #000000;
+            margin-top: 20px;
+        }
+        
+        .manual-form h3 {
+            margin: 0 0 15px 0;
+            font-size: 14px;
+            color: #000000;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .form-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .form-input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #000000;
+            background: #ffffff;
+            color: #000000;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            background: #f8f8f8;
+        }
+        
+        .submit-btn {
+            padding: 12px 20px;
+            background: #000000;
+            color: #ffffff;
+            border: 2px solid #000000;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .submit-btn:hover {
+            background: #333333;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 15px;
+            color: #f8f8f8;
+            font-size: 10px;
+            border-top: 2px solid #ffffff;
+            background: #000000;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .footer a {
+            color: #f8f8f8;
+            text-decoration: underline;
+        }
+        
+        .status-info {
+            background: #f0f0f0;
+            padding: 15px;
+            border: 2px solid #000000;
+            margin-bottom: 20px;
+            font-size: 12px;
+            color: #000000;
+        }
+        
+        .status-info strong {
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .error-info {
+            background: #f0f0f0;
+            padding: 15px;
+            border: 2px solid #000000;
+            margin-bottom: 20px;
+            font-size: 12px;
+            color: #000000;
+        }
+        
+        .error-info strong {
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <img src="/static/images/pamir-logo-01.svg" alt="Pamir AI" class="logo">
-            <h1>WiFi Setup</h1>
-            <p>Connect your device to a WiFi network</p>
+            <h1>{{ device_name }} WiFi Setup</h1>
+            <p class="subtitle">Choose a network to connect to</p>
         </div>
         
         <div class="content">
-            <div id="status-card" class="status-card disconnected">
-                <div class="status-title">Connection Status</div>
-                <div id="status-info" class="status-info">Checking connection...</div>
+            {% if error %}
+            <div class="error-info">
+                <strong>Error:</strong> {{ error }}
+            </div>
+            {% endif %}
+            
+            {% if state %}
+            <div class="status-info">
+                <strong>Status:</strong> {{ state }}
+            </div>
+            {% endif %}
+            
+            <div class="network-list">
+                {% for network in networks %}
+                <a href="{{ url_for('confirm', ssid=network.ssid, encrypted=network.security) }}" 
+                   class="network-btn {% if network.security == 'encrypted' %}encrypted{% endif %}">
+                    {{ network.ssid }}
+                    <span class="signal">{{ network.signal_strength }}%</span>
+                </a>
+                {% endfor %}
+                
+                {% if not networks %}
+                <div class="status-info">
+                    No networks found. Make sure WiFi networks are available and try refreshing the page.
+                </div>
+                {% endif %}
             </div>
             
-            <div id="alert-container"></div>
-            
-            <div class="form-group">
-                <label for="ssid-input">Network Name (SSID)</label>
-                <input type="text" id="ssid-input" placeholder="Enter WiFi network name">
-            </div>
-            
-            <div class="form-group">
-                <label for="password-input">Password</label>
-                <input type="password" id="password-input" placeholder="Enter password (leave empty for open networks)">
-            </div>
-            
-            <div>
-                <button id="connect-btn" class="btn btn-primary">Connect</button>
-                <!-- <button id="complete-btn" class="btn btn-success" style="display: none;">Complete Setup</button> -->
+            <div class="manual-form">
+                <h3>Connect to Hidden Network</h3>
+                <form action="{{ url_for('confirm') }}" method="get">
+                    <input type="hidden" name="encrypted" value="encrypted">
+                    <div class="form-group">
+                        <input type="text" name="ssid" class="form-input" 
+                               placeholder="Enter network name (SSID)" required>
+                        <button type="submit" class="submit-btn">Connect</button>
+                    </div>
+                </form>
             </div>
         </div>
+        
+        <div class="footer">
+            <p>
+            	{{ device_name }} by
+                <img src="{{ url_for('static', filename='images/pamir-logo-01.svg') }}" alt="Pamir AI" style="height: 48px; width: auto; vertical-align: middle; margin-right: 8px;">
+            </p>
+            <p><a href="javascript:location.reload()">Refresh Networks</a></p>
+        </div>
     </div>
-
-    <script src="/static/js/wifi-setup.js"></script>
 </body>
 </html> 

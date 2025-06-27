@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Connect to {{ ssid }} - Distiller WiFi Setup</title>
+    <link rel="icon" href="{{ url_for('static', filename='images/pamir-logo-01.svg') }}">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+            background: #ffffff;
+            color: #000000;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.4;
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: #ffffff;
+            border: 3px solid #000000;
+            border-radius: 0;
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #000000;
+            color: #ffffff;
+            padding: 20px;
+            text-align: center;
+            border-bottom: 3px solid #000000;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .header .subtitle {
+            margin: 8px 0 0 0;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .content {
+            padding: 30px 20px;
+        }
+        
+        .network-info {
+            background: #f8f8f8;
+            padding: 20px;
+            border: 2px solid #000000;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+        
+        .network-name {
+            font-size: 16px;
+            font-weight: bold;
+            color: #000000;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-family: monospace;
+        }
+        
+        .network-security {
+            color: #000000;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .security-encrypted {
+            color: #000000;
+        }
+        
+        .security-open {
+            color: #000000;
+        }
+        
+        .password-form {
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #000000;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #000000;
+            background: #ffffff;
+            color: #000000;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            background: #f8f8f8;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 25px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 12px 20px;
+            border: 2px solid #000000;
+            background: #ffffff;
+            color: #000000;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+            transition: all 0.2s ease;
+            display: inline-block;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .btn-primary {
+            background: #000000;
+            color: #ffffff;
+        }
+        
+        .btn-primary:hover {
+            background: #333333;
+        }
+        
+        .btn-secondary:hover {
+            background: #f0f0f0;
+            text-decoration: none;
+            color: #000000;
+        }
+        
+        .help-text {
+            font-size: 12px;
+            color: #666666;
+            margin-top: 10px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 15px;
+            color: #f8f8f8;
+            font-size: 10px;
+            border-top: 2px solid #ffffff;
+            background: #000000;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Connect to Network</h1>
+            <p class="subtitle">{{ device_name }} WiFi Setup</p>
+        </div>
+        
+        <div class="content">
+            <div class="network-info">
+                <div class="network-name">{{ ssid }}</div>
+                <div class="network-security {% if encrypted == 'encrypted' %}security-encrypted{% else %}security-open{% endif %}">
+                    {% if encrypted == 'encrypted' %}
+                        [LOCK] Secured Network
+                    {% else %}
+                        [OPEN] Open Network
+                    {% endif %}
+                </div>
+            </div>
+            
+            <form action="{{ url_for('connect') }}" method="post" class="password-form">
+                <input type="hidden" name="ssid" value="{{ ssid }}">
+                
+                {% if encrypted == 'encrypted' %}
+                <div class="form-group">
+                    <label for="password" class="form-label">Network Password:</label>
+                    <input type="password" id="password" name="password" class="form-input" 
+                           placeholder="Enter the network password" required>
+                </div>
+                <div class="help-text">
+                    Enter the password for this secured network
+                </div>
+                {% else %}
+                <div class="help-text">
+                    This is an open network. No password required.
+                </div>
+                {% endif %}
+                
+                <div class="button-group">
+                    <a href="{{ url_for('index') }}" class="btn btn-secondary">Back</a>
+                    <button type="submit" class="btn btn-primary">Connect</button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="footer">
+            <p>
+                {{ device_name }} by
+                <img src="{{ url_for('static', filename='images/pamir-logo-01.svg') }}" alt="Pamir AI" style="height: 48px; width: auto; vertical-align: middle; margin-right: 8px;">
+            </p>
+        </div>
+    </div>
+</body>
+</html> 

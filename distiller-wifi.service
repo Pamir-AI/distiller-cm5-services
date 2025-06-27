@@ -1,0 +1,26 @@
+[Unit]
+Description=Distiller WiFi Setup Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/distiller-wifi
+ExecStart=/usr/bin/python3 /opt/distiller-wifi/distiller_wifi_service.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment variables
+Environment=PYTHONPATH=/opt/distiller-wifi
+Environment=PYTHONUNBUFFERED=1
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/log /opt/distiller-wifi
+
+[Install]
+WantedBy=multi-user.target 

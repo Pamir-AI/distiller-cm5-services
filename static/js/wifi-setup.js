@@ -63,19 +63,6 @@ class WiFiSetup {
     this.connectBtn.disabled = true;
 
     try {
-      // Get hostname information BEFORE initiating connection
-      const statusResponse = await fetch("/api/status");
-      if (!statusResponse.ok) {
-        throw new Error("Failed to get device status");
-      }
-      
-      const statusData = await statusResponse.json();
-      const hostname = statusData.hostname || statusData.mdns_hostname?.replace('.local', '') || 'pamir-ai';
-      const currentPort = window.location.port || "8080";
-      
-      console.log("Device hostname:", hostname);
-      console.log("Redirect will be to:", `http://${hostname}.local:${currentPort}/wifi_status`);
-
       // Initiate the connection
       const connectResponse = await fetch("/api/connect", {
         method: "POST",
@@ -89,8 +76,8 @@ class WiFiSetup {
         throw new Error("Failed to initiate connection");
       }
 
-      // Show connection progress
-      this.showConnectionProgress(ssid, hostname, currentPort);
+      // Show connection progress and redirect to status page
+      this.showConnectionProgress(ssid);
       
     } catch (error) {
       console.error("Connection process failed:", error);
@@ -100,23 +87,20 @@ class WiFiSetup {
     }
   }
 
-  showConnectionProgress(ssid, hostname, port) {
+  showConnectionProgress(ssid) {
     // Show static connection message
     this.showAlert(`Connecting to ${ssid}... Please wait while we establish the connection.`, "info");
     
-    // Redirect after a delay to allow the connection to complete
-    const redirectUrl = `http://${hostname}.local:${port}/wifi_status`;
+    // Redirect to status page after a delay
     setTimeout(() => {
-      this.showAlert(`Redirecting to ${redirectUrl}...`, "info");
+      this.showAlert("Redirecting to status page...", "info");
       
-      // Redirect after a brief additional delay
+      // Redirect to status page
       setTimeout(() => {
-        window.location.href = redirectUrl;
+        window.location.href = "/status";
       }, 2000);
-    }, 8000); // Wait 8 seconds total before starting redirect process
+    }, 3000); // Wait 3 seconds before redirecting
   }
-
-
 
   // Commented out complete setup functionality
   /*
