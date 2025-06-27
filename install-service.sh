@@ -9,7 +9,7 @@ set -e
 SERVICE_NAME="distiller-wifi"
 SERVICE_FILE="distiller-wifi.service"
 SERVICE_USER="root"
-INSTALL_DIR="/opt/distiller-wifi"
+INSTALL_DIR="/home/distiller/distiller-cm5-services"
 SYSTEMD_DIR="/etc/systemd/system"
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -17,9 +17,9 @@ echo "Installing Distiller WiFi Service..."
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
-    echo "Error: This script must be run as root"
-    echo "Please run: sudo bash install-service.sh"
-    exit 1
+	echo "Error: This script must be run as root"
+	echo "Please run: sudo bash install-service.sh"
+	exit 1
 fi
 
 # Create installation directory
@@ -41,12 +41,22 @@ chmod +x "$INSTALL_DIR/distiller_wifi_service.py"
 
 # Install Python dependencies
 echo "Installing Python dependencies..."
-pip3 install -r "$INSTALL_DIR/requirements.txt"
+if command -v uv &>/dev/null; then
+	echo "Using uv pip for Python 2 compatibility"
+	uv pip install -r "$INSTALL_DIR/requirements.txt"
+else
+	echo "Error: uv pip is not installed. Trying pip3 instead."
+	if ! command -v pip3 &>/dev/null; then
+		echo "Error: pip3 is not installed. Please install Python 3 and pip3."
+		exit 1
+	fi
+	pip3 install -r "$INSTALL_DIR/requirements.txt"
+fi
 
 # Check if service file exists
 if [ ! -f "$SERVICE_FILE" ]; then
-    echo "Error: $SERVICE_FILE not found in current directory"
-    exit 1
+	echo "Error: $SERVICE_FILE not found in current directory"
+	exit 1
 fi
 
 # Copy service file to systemd directory
@@ -73,4 +83,4 @@ echo ""
 echo "To view logs:"
 echo "  sudo journalctl -u $SERVICE_NAME -f"
 echo ""
-echo "The service will start automatically on boot." 
+echo "The service will start automatically on boot."

@@ -1,207 +1,212 @@
 # Distiller WiFi Service
 
-A production-ready WiFi setup service for Raspberry Pi CM5 devices. Provides a web-based interface for configuring WiFi connections with automatic hotspot fallback.
+A comprehensive WiFi setup and management service designed for embedded Linux devices (Raspberry Pi CM5, Rockchip boards) with e-ink display support. This service provides an intuitive web interface for WiFi configuration and visual feedback through e-ink displays.
 
 ## Features
 
-- **Automatic Hotspot Mode**: Creates a WiFi access point when no connection is available
-- **Web Interface**: Clean, mobile-friendly interface for WiFi configuration
-- **Single-Radio Support**: Properly handles single-radio WiFi hardware limitations
-- **Connection Verification**: Multiple verification methods ensure reliable connections
-- **E-ink Display Integration**: Optional support for status display on e-ink screens
-- **Systemd Integration**: Runs as a system service with automatic startup
-- **Production Ready**: Optimized logging and error handling
+### WiFi Management
+- **Automatic WiFi Setup**: Creates a hotspot when no connection is available
+- **Web-based Configuration**: User-friendly interface for network selection and password entry
+- **Connection Monitoring**: Automatic reconnection and health monitoring
+- **Network Scanning**: Real-time WiFi network discovery
+- **Dynamic IP Detection**: Automatically detects and uses actual hotspot IP address
 
-## Requirements
+### E-ink Display Support
+- **Setup Instructions**: QR codes and connection details during setup
+- **Connection Progress**: Visual feedback during WiFi connection
+- **Success Confirmation**: Connection success with network details
+- **Current Status**: Real-time WiFi information display
+- **Auto-refresh**: Periodic display updates
 
-- Raspberry Pi CM5 or compatible device
+### Advanced Features
+- **Dynamic Port Configuration**: Configurable web server port
+- **State Management**: Robust service state transitions
+- **Error Recovery**: Automatic fallback to hotspot mode on connection loss
+- **Change Network**: Easy network switching without restart
+- **REST API**: JSON endpoints for status and control
+
+## Quick Start
+
+### Prerequisites
+- Linux system with NetworkManager
 - Python 3.8+
-- NetworkManager
 - Root privileges (for network management)
+- E-ink display hardware (optional)
 
-## Installation
+### Installation
 
 1. **Clone the repository:**
-   ```bash
-   git clone <repository-url>
-   cd distiller-cm5-services
-   ```
-
-2. **Install the service:**
-   ```bash
-   sudo bash install-service.sh
-   ```
-
-3. **Start the service:**
-   ```bash
-   sudo systemctl start distiller-wifi
-   ```
-
-## Usage
-
-### Initial Setup
-
-1. The service automatically starts in hotspot mode if no WiFi connection is detected
-2. Connect to the "DistillerSetup" WiFi network (password: "setup123")
-3. Navigate to http://localhost:8080 (or http://192.168.4.1:8080 if localhost fails) in your browser
-4. Select your WiFi network and enter the password
-5. The device will connect and redirect to the new network
-
-### Service Management
-
 ```bash
-# Check service status
-sudo systemctl status distiller-wifi
-
-# View logs
-sudo journalctl -u distiller-wifi -f
-
-# Restart service
-sudo systemctl restart distiller-wifi
-
-# Stop service
-sudo systemctl stop distiller-wifi
+git clone <repository-url>
+cd distiller-cm5-services
 ```
 
-### Configuration
-
-The service can be configured via command line arguments:
-
+2. **Install dependencies:**
 ```bash
-python3 distiller_wifi_service.py --help
+pip install -r requirements.txt
 ```
 
-Options:
-- `--ssid`: Hotspot SSID (default: DistillerSetup)
-- `--password`: Hotspot password (default: setup123)
-- `--port`: Web server port (default: 8080)
-- `--device-name`: Device name for display (default: Distiller)
-- `--no-eink`: Disable e-ink display support
-- `--verbose`: Enable verbose logging
+3. **Run the service:**
+```bash
+sudo python3 distiller_wifi_service.py
+```
 
-### URL Access
+### Basic Usage
 
-The web interface uses intelligent URL fallback:
-1. **Primary**: `http://localhost:8080` - Works when connected to hotspot
-2. **Secondary**: `http://127.0.0.1:8080` - Alternative localhost address  
-3. **Fallback**: `http://192.168.4.1:8080` - Traditional hotspot IP
+1. **Automatic Setup**: Service automatically starts hotspot mode if no WiFi connection
+2. **Connect to Hotspot**: Join "DistillerSetup" network (password: "setup123")
+3. **Open Web Interface**: Visit the IP address shown on the e-ink display (typically 192.168.4.1:8080)
+4. **Configure WiFi**: Select network, enter password, and connect
+5. **Automatic Transition**: Service transitions to connected mode
 
-The system automatically tries each URL in order until one responds.
+## Configuration
 
-## Architecture
+### Command Line Options
 
-### Components
+```bash
+sudo python3 distiller_wifi_service.py [OPTIONS]
+```
 
-- **`distiller_wifi_service.py`**: Main service with Flask web interface
-- **`network/wifi_manager.py`**: WiFi connection management with NetworkManager
-- **`templates/`**: Web interface templates
-- **`static/`**: CSS, JavaScript, and images for web interface
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--ssid` | "DistillerSetup" | Hotspot network name |
+| `--password` | "setup123" | Hotspot password |
+| `--device-name` | "Distiller" | Device name for display |
+| `--port` | 8080 | Web server port |
+| `--no-eink` | False | Disable e-ink display |
+| `--verbose` | False | Enable debug logging |
 
-### State Management
+### Examples
 
-The service operates in several states with automatic transitions and fallback mechanisms:
+```bash
+# Custom hotspot settings
+sudo python3 distiller_wifi_service.py --ssid "MyDevice" --password "mypassword123"
+
+# Different web port
+sudo python3 distiller_wifi_service.py --port 9090
+
+# Disable e-ink display (for testing)
+sudo python3 distiller_wifi_service.py --no-eink
+
+# Verbose logging
+sudo python3 distiller_wifi_service.py --verbose
+```
+
+## Service States
+
+The service operates in several distinct states:
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Startup
-    Startup --> CheckConnection: Service starts
-    CheckConnection --> Connected: Existing connection found
-    CheckConnection --> HotspotMode: No connection found
-    
-    HotspotMode --> WaitingForUser: Access point started
-    WaitingForUser --> NetworkSelected: User selects network
-    NetworkSelected --> Connecting: User enters password and submits
-    
-    Connecting --> Connected: Connection successful after verification
-    Connecting --> Error: Connection failed after timeout
-    Connecting --> HotspotMode: Critical failure fallback to AP
-    
-    Connected --> RedirectUser: Show success page redirect to new IP
-    RedirectUser --> [*]: User continues to device dashboard
-    
-    Error --> RetryConnection: Auto-retry after delay
-    Error --> HotspotMode: Max retries exceeded return to setup
-    RetryConnection --> Connecting: Retry connection
-    
-    HotspotMode --> HotspotMode: Periodic connection health checks
-    Connected --> HotspotMode: Connection lost fallback to AP
+graph TD
+    A[INITIALIZING] --> B{Check Connection}
+    B -->|Connected| C[CONNECTED]
+    B -->|No Connection| D[HOTSPOT_MODE]
+    D --> E[User Selects Network]
+    E --> F[CONNECTING]
+    F -->|Success| C
+    F -->|Failure| D
+    C -->|Connection Lost| D
+    C -->|Change Network| A
 ```
 
-#### State Descriptions
+### State Descriptions
 
-- **Startup**: Initial service startup and system checks
-- **CheckConnection**: Verify existing WiFi connectivity
-- **HotspotMode**: Access point active (SSID: "DistillerSetup", Password: "setup123")
-- **WaitingForUser**: Web interface available for network selection
-- **NetworkSelected**: User has chosen a network, entering credentials
-- **Connecting**: Attempting connection with timeout and verification
-- **Connected**: Successfully connected with internet access verified
-- **Error**: Connection failed, preparing for retry or fallback
-- **RetryConnection**: Automatic retry with exponential backoff
-- **RedirectUser**: Success page shown, redirecting to device dashboard
-
-### Connection Flow & Scenarios
-
-#### Scenario 1: First-Time Setup
-1. **Device boots** → Service starts in `Startup` state
-2. **No existing connection** → Transitions to `HotspotMode`
-3. **Access point created** → "DistillerSetup" network appears
-4. **User connects** → Web interface accessible at http://localhost:8080 (fallback: http://192.168.4.1:8080)
-5. **Network selection** → User chooses "HomeWiFi" network
-6. **Password entry** → User enters WiFi password
-7. **Connection attempt** → Service transitions to `Connecting` state
-8. **Success** → Connected to "HomeWiFi", redirects to http://192.168.1.100:8080
-9. **Dashboard access** → User continues to device dashboard
-
-#### Scenario 2: Connection Recovery
-1. **Device running** → Currently in `Connected` state on "HomeWiFi"
-2. **Network disruption** → Router reboots, connection lost
-3. **Health check fails** → Service detects connection loss
-4. **Automatic fallback** → Transitions to `HotspotMode`
-5. **Access point restored** → "DistillerSetup" network available again
-6. **User intervention** → Can reconfigure or wait for network recovery
-7. **Network returns** → Automatic reconnection attempt
-8. **Success** → Returns to `Connected` state
-
-#### Scenario 3: Connection Failure with Retry
-1. **User selects network** → Chooses "OfficeWiFi" with wrong password
-2. **Connection attempt** → Service enters `Connecting` state
-3. **Authentication fails** → Transitions to `Error` state
-4. **Automatic retry** → Waits 5 seconds, retries connection
-5. **Retry fails** → Waits 10 seconds, retries again
-6. **Max retries exceeded** → Returns to `HotspotMode`
-7. **User correction** → User enters correct password
-8. **Successful connection** → Connects to "OfficeWiFi"
-
-#### Scenario 4: Changing Networks
-1. **Device connected** → Currently connected to "HomeWiFi"
-2. **User wants to change** → Accesses device dashboard, clicks "Change Network"
-3. **Instruction page shown** → Dedicated page with clear instructions and 10-second countdown
-4. **User informed** → Page explains: disconnect, reconnect to "DistillerSetup", visit setup URL
-5. **Network change initiated** → Service disconnects from "HomeWiFi" after countdown
-6. **Hotspot activation** → Transitions to `HotspotMode`, starts "DistillerSetup" AP
-7. **User reconnects** → User connects to "DistillerSetup" hotspot (password: setup123)
-8. **Setup interface** → User visits http://localhost:8080 (or http://192.168.4.1:8080) for network selection
-9. **New network selection** → User selects "GuestWiFi" network
-10. **New connection** → Service connects to "GuestWiFi"
-11. **Success** → Device now accessible on "GuestWiFi" network
+- **INITIALIZING**: Service startup, checking current network status
+- **HOTSPOT_MODE**: Creating WiFi hotspot for configuration
+- **CONNECTING**: Attempting to connect to selected network
+- **CONNECTED**: Successfully connected to WiFi network
+- **ERROR**: Error state with automatic recovery
 
 ## Web Interface
 
-The web interface provides:
-- Network scanning and selection
-- Password entry for encrypted networks
-- Real-time connection status
-- Mobile-responsive design
-- Automatic redirection after successful connection
+### Main Pages
 
-## Security Features
+- **`/`** - Network selection and configuration
+- **`/status`** - Connection status and monitoring
+- **`/confirm`** - Network confirmation before connection
+- **`/change-network`** - Change network interface
 
-- Runs with minimal required privileges
-- Protected system paths
-- Input validation and sanitization
-- Automatic connection timeouts
-- Secure password handling
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/status` | GET | Current connection status |
+| `/api/networks` | GET | Available WiFi networks |
+| `/api/connect` | POST | Connect to network |
+| `/api/scan` | GET | Trigger network scan |
+| `/refresh-display` | GET | Refresh e-ink display |
+
+### API Examples
+
+```bash
+# Get current status
+curl http://localhost:8080/api/status
+
+# Get available networks
+curl http://localhost:8080/api/networks
+
+# Connect to network
+curl -X POST http://localhost:8080/api/connect \
+  -H "Content-Type: application/json" \
+  -d '{"ssid": "MyNetwork", "password": "mypassword"}'
+
+# Refresh e-ink display
+curl http://localhost:8080/refresh-display
+```
+
+## E-ink Display
+
+### Supported Hardware
+- Waveshare e-Paper displays (240x416 resolution)
+- SPI interface connection
+- Compatible with Raspberry Pi and Rockchip boards
+
+### Display Modes
+
+1. **Setup Mode**: Shows hotspot credentials and QR code
+2. **Connecting Mode**: Shows connection progress
+3. **Success Mode**: Shows connection confirmation
+4. **Info Mode**: Shows current network details
+
+### Manual Display Control
+
+```bash
+# Display current WiFi info
+python3 wifi_info_display.py --display
+
+# Create setup instructions
+python3 wifi_info_display.py --setup --ssid "MyHotspot" --password "password123" --ip "192.168.4.1"
+
+# Create success screen
+python3 wifi_info_display.py --success --ssid "HomeNetwork" --connected-ip "192.168.1.100"
+```
+
+## Network Management
+
+### Dynamic IP Detection
+
+The service automatically detects the actual IP address of the hotspot interface and uses it throughout the web interface. This eliminates connectivity issues that can occur with hardcoded IP addresses, especially when accessing from different device types (iPhone, Android, etc.).
+
+### Change Network Workflow
+
+1. User clicks "Change Network" button
+2. Service shows countdown and instructions
+3. Automatic transition to hotspot mode
+4. User reconnects to setup hotspot
+5. Select new network and configure
+
+## Logging
+
+### Log Locations
+- **System**: `/var/log/distiller-wifi.log` (if writable)
+- **Local**: `./distiller-wifi.log` (fallback)
+- **Console**: stdout (always enabled)
+
+### Log Levels
+- **INFO**: Normal operation events
+- **WARNING**: Recoverable issues
+- **ERROR**: Service errors
+- **DEBUG**: Detailed troubleshooting (with `--verbose`)
 
 ## Troubleshooting
 
@@ -209,62 +214,183 @@ The web interface provides:
 
 **Service won't start:**
 ```bash
-# Check service status
-sudo systemctl status distiller-wifi
+# Check root privileges
+sudo python3 distiller_wifi_service.py
 
-# Check logs for errors
-sudo journalctl -u distiller-wifi -n 50
+# Check NetworkManager
+systemctl status NetworkManager
 ```
 
-**Hotspot not appearing:**
-- Ensure NetworkManager is running
-- Check for conflicting WiFi services
-- Verify device supports AP mode
-
-**Connection failures:**
-- Check network password
-- Verify network is in range
-- Review logs for specific error messages
-
-### Logs
-
-Service logs are available via systemd:
+**Can't connect to hotspot:**
 ```bash
-# Recent logs
-sudo journalctl -u distiller-wifi -n 100
+# Check hotspot status
+nmcli device wifi list | grep DistillerSetup
 
-# Follow logs in real-time
-sudo journalctl -u distiller-wifi -f
-
-# Logs since last boot
-sudo journalctl -u distiller-wifi -b
+# Check firewall
+sudo ufw status
 ```
 
-## Development
+**E-ink display not working:**
+```bash
+# Test e-ink hardware
+python3 eink_display_flush.py
 
-### Testing
+# Check SPI interface
+ls /dev/spi*
 
-Run the service in development mode:
+# Test without e-ink
+python3 distiller_wifi_service.py --no-eink
+```
+
+**Web interface not accessible:**
+```bash
+# Check port availability
+netstat -ln | grep :8080
+
+# Try different port
+python3 distiller_wifi_service.py --port 9090
+
+# Check URL fallback
+curl http://localhost:8080/api/status
+curl http://192.168.4.1:8080/api/status  # Use actual hotspot IP
+```
+
+### Debug Mode
+
+Enable verbose logging for detailed troubleshooting:
+
 ```bash
 sudo python3 distiller_wifi_service.py --verbose
 ```
 
-### Dependencies
+## System Integration
 
-Core dependencies:
-- Flask: Web framework
-- python-networkmanager: NetworkManager integration
-- dbus-python: D-Bus communication
-- cachetools: Network scan caching
+### Systemd Service
 
-Optional dependencies:
-- pillow, numpy: E-ink display support
-- systemd-python: Enhanced systemd integration
+Create `/etc/systemd/system/distiller-wifi.service`:
+
+```ini
+[Unit]
+Description=Distiller WiFi Setup Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/path/to/distiller-cm5-services
+ExecStart=/usr/bin/python3 distiller_wifi_service.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+```bash
+sudo systemctl enable distiller-wifi.service
+sudo systemctl start distiller-wifi.service
+```
+
+### Auto-start on Boot
+
+Add to `/etc/rc.local` (before `exit 0`):
+```bash
+cd /path/to/distiller-cm5-services
+python3 distiller_wifi_service.py &
+```
+
+## Development
+
+### Project Structure
+
+```
+distiller-cm5-services/
+├── distiller_wifi_service.py      # Main service
+├── wifi_info_display.py           # E-ink display functions
+├── eink_display_flush.py          # Low-level e-ink driver
+├── network/
+│   ├── wifi_manager.py            # WiFi management
+│   ├── network_utils.py           # Network utilities
+│   └── __init__.py
+├── templates/                     # Web interface templates
+│   ├── index.html                # Network selection
+│   ├── status.html               # Status monitoring
+│   ├── confirm.html              # Connection confirmation
+│   └── change_network.html       # Network change interface
+├── static/                       # Web assets
+│   ├── css/style.css            # Styling
+│   ├── js/wifi-setup.js         # JavaScript functionality
+│   └── images/pamir-logo-01.svg  # Logo
+├── requirements.txt              # Python dependencies
+└── README.md                    # This file
+```
+
+### Testing
+
+```bash
+# Syntax check
+python3 -m py_compile distiller_wifi_service.py
+
+# Test without hardware
+python3 distiller_wifi_service.py --no-eink --verbose
+
+# Test e-ink display
+python3 wifi_info_display.py --display
+
+# Test web interface
+curl http://localhost:8080/api/status
+```
+
+## Hardware Requirements
+
+### Minimum Requirements
+- ARM-based Linux board (Raspberry Pi, Rockchip, etc.)
+- WiFi capability
+- 512MB RAM
+- Python 3.8+
+- NetworkManager
+
+### Recommended Hardware
+- Raspberry Pi CM5 or equivalent
+- E-ink display (240x416 resolution)
+- SPI interface for e-ink
+- 1GB+ RAM for smooth operation
+
+### GPIO Connections (E-ink)
+
+| E-ink Pin | Raspberry Pi | Rockchip |
+|-----------|--------------|----------|
+| VCC | 3.3V | 3.3V |
+| GND | GND | GND |
+| DIN | SPI0_MOSI | SPI_MOSI |
+| CLK | SPI0_SCLK | SPI_SCLK |
+| CS | SPI0_CE0 | SPI_CS |
+| DC | GPIO25 | GPIO1_C6 |
+| RST | GPIO17 | GPIO1_B1 |
+| BUSY | GPIO24 | GPIO0_D3 |
 
 ## License
 
-[License information]
+This project is licensed under the MIT License. See LICENSE file for details.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
 ## Support
 
-For issues and support, please check the troubleshooting section above or review the service logs for specific error messages. 
+For issues and questions:
+- Check the troubleshooting section
+- Review logs with `--verbose` flag
+- Create an issue on GitHub
+- Test with `--no-eink` for hardware-independent debugging
+
+---
+
+**Note**: This service requires root privileges for NetworkManager operations. Always test in a safe environment before deploying to production systems.

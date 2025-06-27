@@ -3,15 +3,22 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Distiller WiFi Setup</title>
+    <title>{{ device_name }} WiFi Setup</title>
     <link rel="icon" href="{{ url_for('static', filename='images/pamir-logo-01.svg') }}">
     <style>
+        @font-face {
+            font-family: 'MartianMono';
+            src: url('{{ url_for("static", filename="fonts/MartianMonoNerdFont-CondensedBold.ttf") }}') format('truetype');
+            font-weight: bold;
+            font-style: normal;
+        }
+        
         * {
             box-sizing: border-box;
         }
         
         body {
-            font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+            font-family: 'MartianMono', 'Courier New', 'Monaco', 'Menlo', monospace;
             background: #ffffff;
             color: #000000;
             min-height: 100vh;
@@ -45,13 +52,6 @@
             letter-spacing: 1px;
         }
         
-        .header .subtitle {
-            margin: 8px 0 0 0;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
         .content {
             padding: 30px 20px;
         }
@@ -75,7 +75,7 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
             position: relative;
-            font-family: 'Courier New', monospace;
+            font-family: 'MartianMono', monospace;
         }
         
         .network-btn:hover {
@@ -128,7 +128,7 @@
             background: #ffffff;
             color: #000000;
             font-size: 12px;
-            font-family: 'Courier New', monospace;
+            font-family: 'MartianMono', monospace;
         }
         
         .form-input:focus {
@@ -147,7 +147,7 @@
             letter-spacing: 0.5px;
             cursor: pointer;
             transition: background 0.2s ease;
-            font-family: 'Courier New', monospace;
+            font-family: 'MartianMono', monospace;
         }
         
         .submit-btn:hover {
@@ -156,18 +156,49 @@
         
         .footer {
             text-align: center;
-            padding: 15px;
-            color: #f8f8f8;
+            padding: 20px;
+            color: #ffffff;
             font-size: 10px;
-            border-top: 2px solid #ffffff;
+            border-top: 3px solid #000000;
             background: #000000;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            position: relative;
         }
         
-        .footer a {
-            color: #f8f8f8;
-            text-decoration: underline;
+        .footer::before {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: repeating-linear-gradient(
+                90deg,
+                #000000,
+                #000000 8px,
+                #ffffff 8px,
+                #ffffff 16px
+            );
+        }
+        
+        .footer-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .footer-logo {
+            height: 48px;
+            width: auto;
+            filter: brightness(0) invert(1);
+        }
+        
+        .footer-text {
+            font-size: 10px;
+            letter-spacing: 0.3px;
         }
         
         .status-info {
@@ -179,13 +210,8 @@
             color: #000000;
         }
         
-        .status-info strong {
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
         .error-info {
-            background: #f0f0f0;
+            background: #f8f8f8;
             padding: 15px;
             border: 2px solid #000000;
             margin-bottom: 20px;
@@ -193,9 +219,47 @@
             color: #000000;
         }
         
-        .error-info strong {
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+        /* Mobile responsiveness */
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            
+            .container {
+                max-width: 100%;
+                border-width: 2px;
+            }
+            
+            .header {
+                padding: 15px;
+            }
+            
+            .header h1 {
+                font-size: 16px;
+            }
+            
+            .content {
+                padding: 20px 15px;
+            }
+            
+            .network-btn {
+                padding: 12px 15px;
+                font-size: 11px;
+            }
+            
+            .form-group {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .footer-content {
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            .footer-logo {
+                height: 40px;
+            }
         }
     </style>
 </head>
@@ -203,19 +267,12 @@
     <div class="container">
         <div class="header">
             <h1>{{ device_name }} WiFi Setup</h1>
-            <p class="subtitle">Choose a network to connect to</p>
         </div>
         
         <div class="content">
             {% if error %}
             <div class="error-info">
-                <strong>Error:</strong> {{ error }}
-            </div>
-            {% endif %}
-            
-            {% if state %}
-            <div class="status-info">
-                <strong>Status:</strong> {{ state }}
+                {{ error }}
             </div>
             {% endif %}
             
@@ -230,7 +287,7 @@
                 
                 {% if not networks %}
                 <div class="status-info">
-                    No networks found. Make sure WiFi networks are available and try refreshing the page.
+                    No networks found. <a href="javascript:location.reload()" style="color: #000; text-decoration: underline;">Refresh</a> to try again.
                 </div>
                 {% endif %}
             </div>
@@ -241,7 +298,7 @@
                     <input type="hidden" name="encrypted" value="encrypted">
                     <div class="form-group">
                         <input type="text" name="ssid" class="form-input" 
-                               placeholder="Enter network name (SSID)" required>
+                               placeholder="Enter network name" required>
                         <button type="submit" class="submit-btn">Connect</button>
                     </div>
                 </form>
@@ -249,11 +306,10 @@
         </div>
         
         <div class="footer">
-            <p>
-            	{{ device_name }} by
-                <img src="{{ url_for('static', filename='images/pamir-logo-01.svg') }}" alt="Pamir AI" style="height: 48px; width: auto; vertical-align: middle; margin-right: 8px;">
-            </p>
-            <p><a href="javascript:location.reload()">Refresh Networks</a></p>
+            <div class="footer-content">
+                <img src="{{ url_for('static', filename='images/pamir-logo-01.svg') }}" alt="Pamir AI" class="footer-logo">
+                <span class="footer-text">{{ device_name }} Network Setup</span>
+            </div>
         </div>
     </div>
 </body>

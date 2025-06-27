@@ -6,21 +6,21 @@ Wants=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/distiller-wifi
-ExecStart=/usr/bin/python3 /opt/distiller-wifi/distiller_wifi_service.py
+WorkingDirectory=/home/distiller/distiller-cm5-services
+ExecStart=/usr/bin/python3 /home/distiller/distiller-cm5-services/distiller_wifi_service.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
 
 # Environment variables
-Environment=PYTHONPATH=/opt/distiller-wifi
+Environment=PYTHONPATH=/home/distiller/distiller-cm5-services
 Environment=PYTHONUNBUFFERED=1
 
 # Security settings
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/var/log /opt/distiller-wifi
+ReadWritePaths=/var/log /home/distiller/distiller-cm5-services
 
 [Install]
 WantedBy=multi-user.target 

@@ -1,16 +1,27 @@
+# Core web framework dependencies
+flask>=2.3.0
+jinja2>=3.1.2
+
+# Image processing and e-ink display
+pillow>=8.0.0
+numpy>=1.20.0
+spidev>=3.7
+
+# QR code generation for setup screens
+qrcode[pil]>=8.2
+
+# GPIO libraries (platform-specific)
+lgpio>=0.2.2.0  # For Raspberry Pi
+gpiod>=2.0.0    # For Rockchip/other Linux boards
+
+# Input device monitoring (optional)
+evdev>=1.9.2
+
+# Network service discovery (if using mDNS features)
+zeroconf>=0.147.0
+
+# Development and testing (optional)
 fastapi>=0.104.1
 uvicorn[standard]>=0.24.0
 pydantic>=2.5.0
-jinja2>=3.1.2
-python-multipart>=0.0.6 
-pillow>=8.0.0
-numpy>=1.20.0
-evdev>=1.9.2
-spidev>=3.7
-qrcode[pil]>=8.2
-lgpio>=0.2.2.0
-zeroconf>=0.147.0
-flask>=2.3.0
-python-networkmanager>=2.2
-dbus-python>=1.2.18
-cachetools>=5.0.0
+python-multipart>=0.0.6

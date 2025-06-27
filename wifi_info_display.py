@@ -24,7 +24,15 @@ except ImportError:
 from network.network_utils import NetworkUtils
 
 # Import our simple e-ink display functions
-from eink_display_flush import SimpleEinkDriver, load_and_convert_image
+try:
+    from eink_display_flush import SimpleEinkDriver, load_and_convert_image
+
+    EINK_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"E-ink display not available: {e}")
+    SimpleEinkDriver = None
+    load_and_convert_image = None
+    EINK_AVAILABLE = False
 
 # Configure logging
 logging.basicConfig(
@@ -34,10 +42,11 @@ logger = logging.getLogger(__name__)
 
 
 def create_wifi_info_image(
-    width=240, height=416, filename="wifi_info.png", auto_display=False
+    width=250, height=128, filename="wifi_info.png", auto_display=False
 ):
     """
     Create an image with WiFi information for e-ink display
+    Optimized for horizontal layout on monochrome e-ink displays
 
     Args:
         width: Image width in pixels
@@ -66,235 +75,165 @@ def create_wifi_info_image(
     img = Image.new("L", (width, height), 255)  # White background
     draw = ImageDraw.Draw(img)
 
-    # Try to load fonts - prioritize MartianMono
+    # Try to load fonts - optimized sizes for horizontal layout
     try:
         # Use MartianMono font from local directory
-        martian_font_path = (
-            "/opt/fonts/MartianMonoNerdFont-CondensedBold.ttf"
+        martian_font_path = os.path.join(
+            os.getcwd(), "fonts", "MartianMonoNerdFont-CondensedBold.ttf"
         )
-        font_title = ImageFont.truetype(martian_font_path, 24)
-        font_large = ImageFont.truetype(martian_font_path, 20)
-        font_medium = ImageFont.truetype(martian_font_path, 16)
-        font_small = ImageFont.truetype(martian_font_path, 14)
-        font_tiny = ImageFont.truetype(martian_font_path, 12)
+        font_header = ImageFont.truetype(martian_font_path, 18)   # Main header
+        font_large = ImageFont.truetype(martian_font_path, 16)   # Important info
+        font_medium = ImageFont.truetype(martian_font_path, 14)  # Secondary info
+        font_small = ImageFont.truetype(martian_font_path, 12)   # Details
+        font_tiny = ImageFont.truetype(martian_font_path, 10)    # Labels
         logger.info("Using MartianMono font for better readability")
     except Exception as e:
         logger.warning(f"Could not load MartianMono font: {e}")
         try:
-            # Fallback to Liberation fonts with larger sizes
-            font_title = ImageFont.truetype(
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 22
-            )
-            font_large = ImageFont.truetype(
+            # Fallback to Liberation fonts
+            font_header = ImageFont.truetype(
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 18
             )
-            font_medium = ImageFont.truetype(
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 16
+            font_large = ImageFont.truetype(
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 16
             )
-            font_small = ImageFont.truetype(
+            font_medium = ImageFont.truetype(
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 14
             )
-            font_tiny = ImageFont.truetype(
+            font_small = ImageFont.truetype(
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 12
             )
+            font_tiny = ImageFont.truetype(
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 10
+            )
         except:
-            try:
-                # Fallback fonts with larger sizes
-                font_title = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", 22)
-                font_large = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", 18)
-                font_medium = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", 16)
-                font_small = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", 14)
-                font_tiny = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", 12)
-            except:
-                # Use default font
-                font_title = ImageFont.load_default()
-                font_large = ImageFont.load_default()
-                font_medium = ImageFont.load_default()
-                font_small = ImageFont.load_default()
-                font_tiny = ImageFont.load_default()
+            # Use default font scaled appropriately
+            font_header = ImageFont.load_default()
+            font_large = ImageFont.load_default()
+            font_medium = ImageFont.load_default()
+            font_small = ImageFont.load_default()
+            font_tiny = ImageFont.load_default()
 
-    # Border
-    draw.rectangle([0, 0, width - 1, height - 1], outline=0, width=2)
-
-    y_pos = 15
-
-    # Title with WiFi icon (simple representation)
-    title = "WIFI INFO"
-    bbox = draw.textbbox((0, 0), title, font=font_title)
-    title_width = bbox[2] - bbox[0]
-
-    # Check if title still overflows and use smaller font if needed
-    if title_width > (width - 80):  # Leave space for WiFi icon and margins
-        bbox = draw.textbbox((0, 0), title, font=font_large)
-        title_width = bbox[2] - bbox[0]
-        draw.text(((width - title_width) // 2, y_pos), title, fill=0, font=font_large)
-    else:
-        draw.text(((width - title_width) // 2, y_pos), title, fill=0, font=font_title)
-
-    # Draw simple WiFi icon
-    icon_x = (width - title_width) // 2 - 30
-    icon_y = y_pos + 5
-    # Simple WiFi symbol using arcs
-    for i in range(3):
-        radius = 8 + i * 4
-        draw.arc(
-            [icon_x - radius, icon_y - radius, icon_x + radius, icon_y + radius],
-            start=225,
-            end=315,
-            fill=0,
-            width=2,
-        )
-    draw.ellipse([icon_x - 2, icon_y - 2, icon_x + 2, icon_y + 2], fill=0)
-
-    y_pos += 35
+    # === HORIZONTAL LAYOUT DESIGN ===
+    # Top section: WiFi name and status
+    # Middle section: IP address and signal strength
+    # Bottom section: Connection details and timestamp
     
-    # Timestamp with timezone
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z")
-    if not timestamp.endswith(' Z') and not timestamp.split()[-1]:  # If no timezone info
-        import time
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S") + f" {time.tzname[0]}"
+    margin = 8
+    center_x = width // 2
     
-    draw.text((10, y_pos), f"Updated: {timestamp}", fill=0, font=font_tiny)
-    y_pos += 25
-
-    # Horizontal separator
-    draw.line([10, y_pos, width - 10, y_pos], fill=0, width=1)
-    y_pos += 15
-
-    # WiFi Network Name (SSID)
-    draw.text((10, y_pos), "NETWORK NAME:", fill=0, font=font_medium)
-    y_pos += 20
-
-    # Display SSID with larger font, handle long names
+    # === TOP SECTION - WiFi Network Name ===
+    y = margin
+    
+    # WiFi status icon (left side)
+    is_connected = wifi_name != "Not Connected"
+    status_icon = "●" if is_connected else "○"
+    draw.text((margin, y), status_icon, fill=0, font=font_header)
+    
+    # "WiFi" label
+    label_x = margin + 25
+    draw.text((label_x, y + 2), "WiFi", fill=0, font=font_tiny)
+    
+    # Network name (centered, large)
     ssid_display = wifi_name if len(wifi_name) <= 20 else wifi_name[:17] + "..."
-    draw.text((10, y_pos), ssid_display, fill=0, font=font_large)
-    y_pos += 30
-
-    # IP Address
-    draw.text((10, y_pos), "IP ADDRESS:", fill=0, font=font_medium)
-    y_pos += 20
-    draw.text((10, y_pos), ip_address, fill=0, font=font_large)
-    y_pos += 30
-
-    # Signal Strength with visual indicator
-    draw.text((10, y_pos), "SIGNAL STRENGTH:", fill=0, font=font_medium)
-    y_pos += 20
-    draw.text((10, y_pos), signal_strength, fill=0, font=font_large)
-
-    # Draw signal strength bars
-    signal_x = 10
-    signal_y = y_pos + 25
-
-    # Extract percentage from signal strength if available
-    signal_percent = 0
+    ssid_bbox = draw.textbbox((0, 0), ssid_display, font=font_large)
+    ssid_width = ssid_bbox[2] - ssid_bbox[0]
+    ssid_x = center_x - (ssid_width // 2)
+    draw.text((ssid_x, y), ssid_display, fill=0, font=font_large)
+    
+    # Connection time/status (right side)
+    timestamp = datetime.now().strftime("%H:%M")
+    time_bbox = draw.textbbox((0, 0), timestamp, font=font_small)
+    time_width = time_bbox[2] - time_bbox[0]
+    draw.text((width - margin - time_width, y + 2), timestamp, fill=0, font=font_small)
+    
+    y += 22
+    
+    # Separator line
+    draw.line([margin, y, width - margin, y], fill=0, width=1)
+    y += 8
+    
+    # === MIDDLE SECTION - IP Address and Signal ===
+    # IP Address (left side)
+    ip_label = "IP"
+    draw.text((margin, y), ip_label, fill=0, font=font_tiny)
+    draw.text((margin, y + 12), ip_address, fill=0, font=font_medium)
+    
+    # Signal strength (right side)
+    signal_percent = 50
     if "%" in signal_strength:
         try:
             signal_percent = int(signal_strength.split("%")[0])
         except:
-            signal_percent = 50  # Default
-    else:
-        signal_percent = 50  # Default if no percentage
-
-    # Draw 5 signal bars
-    for i in range(5):
-        bar_height = 5 + i * 3
-        bar_x = signal_x + i * 15
-        bar_y = signal_y + (15 - bar_height)
-
-        # Fill bar if signal is strong enough
-        if signal_percent > (i * 20):
-            draw.rectangle([bar_x, bar_y, bar_x + 10, signal_y + 15], fill=0)
+            pass
+    
+    # Signal bars (modern horizontal bars)
+    signal_label_x = width - 80
+    draw.text((signal_label_x, y), "Signal", fill=0, font=font_tiny)
+    
+    # Enhanced signal bars
+    bar_y = y + 12
+    bar_width = 8
+    bar_spacing = 2
+    bar_heights = [6, 10, 14, 18]  # Progressive heights
+    
+    for i in range(4):
+        bar_x = signal_label_x + i * (bar_width + bar_spacing)
+        bar_height = bar_heights[i]
+        
+        if signal_percent > (i * 25):
+            # Filled bar
+            draw.rectangle([bar_x, bar_y + (18 - bar_height), 
+                          bar_x + bar_width, bar_y + 18], fill=0)
         else:
-            draw.rectangle(
-                [bar_x, bar_y, bar_x + 10, signal_y + 15], outline=0, width=1
-            )
-
-    y_pos += 50
+            # Empty bar outline
+            draw.rectangle([bar_x, bar_y + (18 - bar_height), 
+                          bar_x + bar_width, bar_y + 18], outline=0, width=1)
     
-    # SSH Connection Instructions
-    draw.text((10, y_pos), "SSH CONNECTION:", fill=0, font=font_medium)
-    y_pos += 20
-    ssh_command = f"distiller@{ip_address}"
-    draw.text((10, y_pos), ssh_command, fill=0, font=font_medium)
-    y_pos += 30
+    # Signal percentage
+    signal_text = f"{signal_percent}%"
+    signal_text_x = signal_label_x + 40
+    draw.text((signal_text_x, y + 12), signal_text, fill=0, font=font_small)
     
-    # Default Password
-    draw.text((10, y_pos), "PASSWORD:", fill=0, font=font_medium)
-    y_pos += 20
-    draw.text((10, y_pos), "one", fill=0, font=font_large)
-    y_pos += 30
+    y += 35
     
-    # MAC Address
-    # draw.text((10, y_pos), "MAC ADDRESS:", fill=0, font=font_medium)
-    # y_pos += 20
-
-    # # Split MAC address into two lines if too long
-    # if len(mac_address) > 17:
-    #     mac_line1 = mac_address[:17]
-    #     mac_line2 = mac_address[17:]
-    #     draw.text((10, y_pos), mac_line1, fill=0, font=font_small)
-    #     y_pos += 15
-    #     draw.text((10, y_pos), mac_line2, fill=0, font=font_small)
-    #     y_pos += 20
-    # else:
-    #     draw.text((10, y_pos), mac_address, fill=0, font=font_small)
-    #     y_pos += 25
-
-    # # Hostname
-    # hostname = network_details.get("hostname", "Unknown")
-    # draw.text((10, y_pos), "HOSTNAME:", fill=0, font=font_medium)
-    # y_pos += 20
-    # draw.text((10, y_pos), hostname, fill=0, font=font_small)
-    # y_pos += 25
-
-    # Network Interfaces
-    # interfaces = network_details.get("interfaces", [])
-    # if interfaces:
-    #     draw.text((10, y_pos), "NETWORK INTERFACES:", fill=0, font=font_medium)
-    #     y_pos += 20
-
-    #     for interface in interfaces[:3]:  # Show up to 3 interfaces
-    #         if_name = interface.get("name", "unknown")
-    #         if_type = interface.get("type", "unknown")
-    #         if_ip = interface.get("ip_address", "no IP")
-
-    #         # Truncate long interface names
-    #         if len(if_name) > 12:
-    #             if_name = if_name[:9] + "..."
-
-    #         interface_text = f"{if_name} ({if_type})"
-    #         draw.text((10, y_pos), interface_text, fill=0, font=font_tiny)
-    #         y_pos += 12
-
-    #         if if_ip != "no IP":
-    #             draw.text((15, y_pos), f"IP: {if_ip}", fill=0, font=font_tiny)
-    #             y_pos += 12
-    #         y_pos += 5
-
-    # QR Code placeholder (simple box with QR text)
-    # qr_y = height - 80
-    # qr_size = 60
-    # qr_x = width - qr_size - 10
-
-    # Draw QR code placeholder
-    # draw.rectangle([qr_x, qr_y, qr_x + qr_size, qr_y + qr_size], outline=0, width=2)
-
-    # Simple QR pattern (decorative)
-    # for i in range(5, qr_size-5, 8):
-    #     for j in range(5, qr_size-5, 8):
-    #         if (i + j) % 16 == 0:
-    #             draw.rectangle([qr_x + i, qr_y + j, qr_x + i + 6, qr_y + j + 6], fill=0)
-
-    # QR label
-    # draw.text((qr_x, qr_y + qr_size + 5), "Connect", fill=0, font=font_tiny)
-    # draw.text((qr_x + 5, qr_y + qr_size + 15), "Info", fill=0, font=font_tiny)
-
-    # Footer
-    # footer_y = height - 15
-    # footer_text = "Network Status Display"
-    # bbox = draw.textbbox((0, 0), footer_text, font=font_tiny)
-    # footer_width = bbox[2] - bbox[0]
-    # draw.text(((width - footer_width) // 2, footer_y), footer_text, fill=0, font=font_tiny)
+    # === BOTTOM SECTION - Connection Details ===
+    # Separator line
+    draw.line([margin, y, width - margin, y], fill=0, width=1)
+    y += 6
+    
+    # SSH connection info (horizontal layout)
+    if is_connected:
+        ssh_info = f"SSH: distiller@{ip_address}"
+        draw.text((margin, y), ssh_info, fill=0, font=font_tiny)
+        
+        # Password on same line, right-aligned
+        pwd_text = "Password: one"
+        pwd_bbox = draw.textbbox((0, 0), pwd_text, font=font_tiny)
+        pwd_width = pwd_bbox[2] - pwd_bbox[0]
+        draw.text((width - margin - pwd_width, y), pwd_text, fill=0, font=font_tiny)
+        
+        y += 12
+        
+        # Web interface info
+        web_info = f"Web: http://{ip_address}:8080"
+        draw.text((margin, y), web_info, fill=0, font=font_tiny)
+        
+        # Device status
+        device_status = "● READY"
+        status_bbox = draw.textbbox((0, 0), device_status, font=font_tiny)
+        status_width = status_bbox[2] - status_bbox[0]
+        draw.text((width - margin - status_width, y), device_status, fill=0, font=font_tiny)
+    else:
+        # Disconnected state
+        disconnect_msg = "Connect to 'DistillerSetup' hotspot to configure"
+        msg_bbox = draw.textbbox((0, 0), disconnect_msg, font=font_tiny)
+        msg_width = msg_bbox[2] - msg_bbox[0]
+        msg_x = center_x - (msg_width // 2)
+        draw.text((msg_x, y), disconnect_msg, fill=0, font=font_tiny)
+    
+    # Clean border
+    draw.rectangle([0, 0, width - 1, height - 1], outline=0, width=2)
 
     # Save the image
     img.save(filename)
@@ -309,10 +248,18 @@ def create_wifi_info_image(
 
 def display_on_eink(image_path):
     """Display the image on the e-ink screen"""
+    if not EINK_AVAILABLE:
+        logger.warning("E-ink display not available, skipping display")
+        return False
+
     logger.info("Displaying image on e-ink screen...")
 
     try:
         # Initialize e-ink display
+        if SimpleEinkDriver is None or load_and_convert_image is None:
+            logger.error("E-ink display functions not available")
+            return False
+
         display = SimpleEinkDriver()
 
         if not display.initialize():
@@ -346,19 +293,20 @@ def create_wifi_setup_image(
     password,
     ip_address,
     port=8080,
-    width=240,
-    height=416,
+    width=250,
+    height=128,
     filename="wifi_setup.png",
     auto_display=False,
 ):
     """
-    Create an image with WiFi setup instructions including QR code
+    Create an image with WiFi setup instructions for e-ink display
+    Optimized for horizontal layout on monochrome e-ink displays
 
     Args:
-        ssid: WiFi network name
-        password: WiFi password
-        ip_address: IP address for the web interface
-        port: Port number for the web interface
+        ssid: WiFi hotspot name
+        password: WiFi hotspot password
+        ip_address: Setup interface IP address
+        port: Setup interface port
         width: Image width in pixels
         height: Image height in pixels
         filename: Output filename
@@ -372,24 +320,22 @@ def create_wifi_setup_image(
     img = Image.new("L", (width, height), 255)  # White background
     draw = ImageDraw.Draw(img)
 
-    # Try to load fonts
+    # Try to load fonts - optimized for horizontal setup layout
     try:
-        martian_font_path = (
-            "/opt/fonts/MartianMonoNerdFont-CondensedBold.ttf"
+        martian_font_path = os.path.join(
+            os.getcwd(), "fonts", "MartianMonoNerdFont-CondensedBold.ttf"
         )
-        font_title = ImageFont.truetype(martian_font_path, 22)
-        font_large = ImageFont.truetype(martian_font_path, 18)
+        font_header = ImageFont.truetype(martian_font_path, 18)
+        font_large = ImageFont.truetype(martian_font_path, 16)
         font_medium = ImageFont.truetype(martian_font_path, 14)
         font_small = ImageFont.truetype(martian_font_path, 12)
-        font_tiny = ImageFont.truetype(
-            martian_font_path, 11
-        )  # For long text that might overflow
+        font_tiny = ImageFont.truetype(martian_font_path, 10)
         logger.info("Using MartianMono font for setup instructions")
     except Exception as e:
         logger.warning(f"Could not load MartianMono font: {e}")
         try:
-            font_title = ImageFont.truetype(
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 20
+            font_header = ImageFont.truetype(
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 18
             )
             font_large = ImageFont.truetype(
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 16
@@ -401,90 +347,71 @@ def create_wifi_setup_image(
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 12
             )
             font_tiny = ImageFont.truetype(
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 11
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 10
             )
         except:
-            font_title = ImageFont.load_default()
+            font_header = ImageFont.load_default()
             font_large = ImageFont.load_default()
             font_medium = ImageFont.load_default()
             font_small = ImageFont.load_default()
             font_tiny = ImageFont.load_default()
 
-    # Border
-    draw.rectangle([0, 0, width - 1, height - 1], outline=0, width=2)
-
-    y_pos = 15
-
-    # Title
-    title = "WIFI SETUP"
-    bbox = draw.textbbox((0, 0), title, font=font_title)
-    title_width = bbox[2] - bbox[0]
-    draw.text(((width - title_width) // 2, y_pos), title, fill=0, font=font_title)
-    y_pos += 35
-
-    # Setup icon (simple WiFi + gear)
-    icon_x = (width - title_width) // 2 - 35
-    icon_y = y_pos - 25
-    # WiFi symbol
-    for i in range(3):
-        radius = 6 + i * 3
-        draw.arc(
-            [icon_x - radius, icon_y - radius, icon_x + radius, icon_y + radius],
-            start=225,
-            end=315,
-            fill=0,
-            width=2,
-        )
-    draw.ellipse([icon_x - 2, icon_y - 2, icon_x + 2, icon_y + 2], fill=0)
-    # Gear symbol
-    gear_x = icon_x + 25
-    draw.ellipse([gear_x - 6, icon_y - 6, gear_x + 6, icon_y + 6], outline=0, width=2)
-    draw.ellipse([gear_x - 3, icon_y - 3, gear_x + 3, icon_y + 3], fill=0)
-
-    # Instructions
-    draw.text((10, y_pos), "CONNECT TO WIFI:", fill=0, font=font_medium)
-    y_pos += 20
-
-    # Network name - truncate if too long
-    network_text = f"Network: {ssid}"
-    if len(network_text) > 25:  # Adjust based on your display width
-        network_text = f"Network: {ssid[:18]}..."
-    draw.text((10, y_pos), network_text, fill=0, font=font_medium)
-    y_pos += 22
-
-    # Password - use smaller font and possibly split if very long
-    password_text = f"Password: {password}"
-    if len(password_text) > 30:
-        # Split into two lines if password is very long
-        draw.text((10, y_pos), "Password:", fill=0, font=font_medium)
-        y_pos += 15
-        draw.text((10, y_pos), password, fill=0, font=font_tiny)
-        y_pos += 20
-    else:
-        draw.text((10, y_pos), password_text, fill=0, font=font_small)
-        y_pos += 25
-
+    # === HORIZONTAL SETUP LAYOUT ===
+    margin = 8
+    center_x = width // 2
+    
+    # === TOP SECTION - WiFi Setup Header ===
+    y = margin
+    
+    # Setup icon
+    setup_icon = "⚙"
+    draw.text((margin, y), setup_icon, fill=0, font=font_header)
+    
+    # Title centered
+    title = "WiFi Setup Required"
+    title_bbox = draw.textbbox((0, 0), title, font=font_large)
+    title_width = title_bbox[2] - title_bbox[0]
+    title_x = center_x - (title_width // 2)
+    draw.text((title_x, y + 2), title, fill=0, font=font_large)
+    
+    # Status (right side)
+    draw.text((width - 30, y + 4), "1/3", fill=0, font=font_small)
+    
+    y += 22
+    
     # Separator line
-    draw.line([10, y_pos, width - 10, y_pos], fill=0, width=1)
-    y_pos += 15
-
-    # Web interface instructions
-    draw.text((10, y_pos), "OPEN WEB BROWSER:", fill=0, font=font_medium)
-    y_pos += 20
-
-    # URL - use smaller font for better fit and possibly split long URLs
-    url = f"http://{ip_address}:{port}"
-    if len(url) > 25:
-        # Split URL if too long
-        draw.text((10, y_pos), f"http://{ip_address}", fill=0, font=font_small)
-        y_pos += 16
-        draw.text((10, y_pos), f":{port}", fill=0, font=font_small)
-        y_pos += 20
-    else:
-        draw.text((10, y_pos), url, fill=0, font=font_small)
-        y_pos += 25
-
-    # QR Code section
+    draw.line([margin, y, width - margin, y], fill=0, width=1)
+    y += 8
+    
+    # === MIDDLE SECTION - Connection Instructions ===
+    # Left side: Connection details
+    # Step 1: Connect to hotspot
+    step1_label = "1. Connect to WiFi:"
+    draw.text((margin, y), step1_label, fill=0, font=font_tiny)
+    y += 12
+    
+    # SSID display (larger, prominent)
+    ssid_display = ssid if len(ssid) <= 18 else ssid[:15] + "..."
+    draw.text((margin + 8, y), ssid_display, fill=0, font=font_medium)
+    y += 16
+    
+    # Password (if not empty)
+    if password:
+        pwd_label = "Password:"
+        draw.text((margin + 8, y), pwd_label, fill=0, font=font_tiny)
+        pwd_display = password if len(password) <= 15 else password[:12] + "..."
+        pwd_bbox = draw.textbbox((0, 0), pwd_display, font=font_small)
+        pwd_width = pwd_bbox[2] - pwd_bbox[0]
+        draw.text((margin + 60, y - 2), pwd_display, fill=0, font=font_small)
+        y += 14
+    
+    # === RIGHT SIDE - QR Code (if available) ===
+    qr_size = 65
+    qr_x = width - qr_size - margin
+    qr_y = margin + 25
+    
+    setup_url = f"http://{ip_address}:{port}"
+    
     if qrcode:
         try:
             # Generate QR code
@@ -494,52 +421,60 @@ def create_wifi_setup_image(
                 box_size=2,
                 border=1,
             )
-            qr.add_data(url)
+            qr.add_data(setup_url)
             qr.make(fit=True)
 
             # Create QR code image
             qr_img = qr.make_image(fill_color="black", back_color="white")
-            qr_img = qr_img.convert("L")  # Convert to grayscale
-
-            # Resize QR code to fit
-            qr_size = min(width - 20, height - y_pos - 40)
-            qr_size = min(qr_size, 120)  # Max size
+            qr_img = qr_img.convert("L")
             qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
-
-            # Position QR code
-            qr_x = (width - qr_size) // 2
-            qr_y = y_pos + 10
 
             # Paste QR code
             img.paste(qr_img, (qr_x, qr_y))
 
-            # QR code label
-            y_pos = qr_y + qr_size + 10
-            label = "Scan QR code or type URL above"
-            bbox = draw.textbbox((0, 0), label, font=font_small)
-            label_width = bbox[2] - bbox[0]
-            draw.text(
-                ((width - label_width) // 2, y_pos), label, fill=0, font=font_small
-            )
+            # QR label
+            qr_label = "Scan"
+            qr_label_bbox = draw.textbbox((0, 0), qr_label, font=font_tiny)
+            qr_label_width = qr_label_bbox[2] - qr_label_bbox[0]
+            qr_label_x = qr_x + (qr_size // 2) - (qr_label_width // 2)
+            draw.text((qr_label_x, qr_y + qr_size + 2), qr_label, fill=0, font=font_tiny)
 
         except Exception as e:
             logger.error(f"Failed to generate QR code: {e}")
-            # Fallback: just show text instructions
-            draw.text((10, y_pos), "Type the URL above", fill=0, font=font_medium)
-            draw.text((10, y_pos + 15), "in your browser", fill=0, font=font_medium)
+            # Fallback box with pattern
+            draw.rectangle([qr_x, qr_y, qr_x + qr_size, qr_y + qr_size], outline=0, width=2)
+            # Simple pattern
+            for i in range(5, qr_size-5, 8):
+                for j in range(5, qr_size-5, 8):
+                    if (i + j) % 16 == 0:
+                        draw.rectangle([qr_x + i, qr_y + j, qr_x + i + 4, qr_y + j + 4], fill=0)
+            draw.text((qr_x + 20, qr_y + qr_size + 2), "QR", fill=0, font=font_tiny)
     else:
-        # No QR code available
-        draw.text((10, y_pos), "Type the URL above", fill=0, font=font_medium)
-        draw.text((10, y_pos + 15), "in your browser", fill=0, font=font_medium)
-
-    # Footer
-    footer_y = height - 15
-    footer_text = "Configure WiFi Settings"
-    bbox = draw.textbbox((0, 0), footer_text, font=font_small)
-    footer_width = bbox[2] - bbox[0]
-    draw.text(
-        ((width - footer_width) // 2, footer_y), footer_text, fill=0, font=font_small
-    )
+        # No QR code - simple box
+        draw.rectangle([qr_x, qr_y, qr_x + qr_size, qr_y + qr_size], outline=0, width=1)
+        draw.text((qr_x + 15, qr_y + 28), "Scan to", fill=0, font=font_tiny)
+        draw.text((qr_x + 15, qr_y + 40), "Connect", fill=0, font=font_tiny)
+    
+    # === BOTTOM SECTION - Browser Instructions ===
+    y = height - 35
+    
+    # Separator line
+    draw.line([margin, y, width - margin - qr_size - 5, y], fill=0, width=1)
+    y += 5
+    
+    # Step 2: Open browser
+    step2_label = "2. Open browser and visit:"
+    draw.text((margin, y), step2_label, fill=0, font=font_tiny)
+    y += 12
+    
+    # URL (prominent)
+    url_display = setup_url
+    if len(url_display) > 22:
+        url_display = url_display[:19] + "..."
+    draw.text((margin + 8, y), url_display, fill=0, font=font_small)
+    
+    # Clean border
+    draw.rectangle([0, 0, width - 1, height - 1], outline=0, width=2)
 
     # Save the image
     img.save(filename)
@@ -555,13 +490,14 @@ def create_wifi_setup_image(
 def create_wifi_success_image(
     ssid,
     ip_address,
-    width=240,
-    height=416,
+    width=250,
+    height=128,
     filename="wifi_success.png",
     auto_display=False,
 ):
     """
     Create an image showing successful WiFi connection
+    Optimized for horizontal layout on monochrome e-ink displays
 
     Args:
         ssid: Connected WiFi network name
@@ -579,24 +515,25 @@ def create_wifi_success_image(
     img = Image.new("L", (width, height), 255)  # White background
     draw = ImageDraw.Draw(img)
 
-    # Try to load fonts
+    # Try to load fonts - optimized for horizontal success layout
     try:
-        martian_font_path = (
-            "/opt/fonts/MartianMonoNerdFont-CondensedBold.ttf"
+        martian_font_path = os.path.join(
+            os.getcwd(), "fonts", "MartianMonoNerdFont-CondensedBold.ttf"
         )
-        font_title = ImageFont.truetype(martian_font_path, 24)
-        font_large = ImageFont.truetype(martian_font_path, 18)
+        font_header = ImageFont.truetype(martian_font_path, 18)
+        font_large = ImageFont.truetype(martian_font_path, 16)
         font_medium = ImageFont.truetype(martian_font_path, 14)
         font_small = ImageFont.truetype(martian_font_path, 12)
+        font_tiny = ImageFont.truetype(martian_font_path, 10)
         logger.info("Using MartianMono font for success screen")
     except Exception as e:
         logger.warning(f"Could not load MartianMono font: {e}")
         try:
-            font_title = ImageFont.truetype(
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 22
+            font_header = ImageFont.truetype(
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 18
             )
             font_large = ImageFont.truetype(
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 18
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 16
             )
             font_medium = ImageFont.truetype(
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 14
@@ -604,89 +541,113 @@ def create_wifi_success_image(
             font_small = ImageFont.truetype(
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 12
             )
+            font_tiny = ImageFont.truetype(
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 10
+            )
         except:
-            font_title = ImageFont.load_default()
+            font_header = ImageFont.load_default()
             font_large = ImageFont.load_default()
             font_medium = ImageFont.load_default()
             font_small = ImageFont.load_default()
+            font_tiny = ImageFont.load_default()
 
-    # Border
-    draw.rectangle([0, 0, width - 1, height - 1], outline=0, width=2)
-
-    y_pos = 20
-
-    # Success title
-    title = "WIFI CONNECTED!"
-    bbox = draw.textbbox((0, 0), title, font=font_title)
-    title_width = bbox[2] - bbox[0]
-    draw.text(((width - title_width) // 2, y_pos), title, fill=0, font=font_title)
-    y_pos += 40
-
-    # Success checkmark (simple)
-    check_x = (width - title_width) // 2 - 30
-    check_y = y_pos - 30
-    # Draw checkmark
-    draw.ellipse(
-        [check_x - 15, check_y - 15, check_x + 15, check_y + 15], outline=0, width=3
-    )
-    # Checkmark inside circle
-    draw.line([check_x - 7, check_y, check_x - 2, check_y + 5], fill=0, width=3)
-    draw.line([check_x - 2, check_y + 5, check_x + 8, check_y - 5], fill=0, width=3)
-
-    # Connected network
-    draw.text((10, y_pos), "CONNECTED TO:", fill=0, font=font_medium)
-    y_pos += 20
-
-    # Network name
-    network_text = ssid
-    if len(network_text) > 20:
-        network_text = ssid[:17] + "..."
-    draw.text((10, y_pos), network_text, fill=0, font=font_large)
-    y_pos += 35
-
-    # IP Address
-    draw.text((10, y_pos), "IP ADDRESS:", fill=0, font=font_medium)
-    y_pos += 20
-    draw.text((10, y_pos), ip_address, fill=0, font=font_large)
-    y_pos += 40
-
+    # === HORIZONTAL SUCCESS LAYOUT ===
+    margin = 8
+    center_x = width // 2
+    
+    # === TOP SECTION - Success Header ===
+    y = margin
+    
+    # Success checkmark icon (left)
+    check_size = 16
+    check_x = margin + 8
+    check_y = y + 2
+    
+    # Large checkmark circle
+    draw.ellipse([check_x - check_size//2, check_y - check_size//2, 
+                  check_x + check_size//2, check_y + check_size//2], outline=0, width=2)
+    
+    # Checkmark inside
+    draw.line([check_x - 4, check_y, check_x - 1, check_y + 3], fill=0, width=2)
+    draw.line([check_x - 1, check_y + 3, check_x + 5, check_y - 3], fill=0, width=2)
+    
+    # "SUCCESS" title (centered)
+    title = "WiFi Connected!"
+    title_bbox = draw.textbbox((0, 0), title, font=font_large)
+    title_width = title_bbox[2] - title_bbox[0]
+    title_x = center_x - (title_width // 2)
+    draw.text((title_x, y), title, fill=0, font=font_large)
+    
+    # Status indicator (right)
+    timestamp = datetime.now().strftime("%H:%M")
+    time_bbox = draw.textbbox((0, 0), timestamp, font=font_small)
+    time_width = time_bbox[2] - time_bbox[0]
+    draw.text((width - margin - time_width, y + 2), timestamp, fill=0, font=font_small)
+    
+    y += 22
+    
     # Separator line
-    draw.line([10, y_pos, width - 10, y_pos], fill=0, width=1)
-    y_pos += 20
-
-    # Success message
-    success_msg = "Setup Complete!"
-    bbox = draw.textbbox((0, 0), success_msg, font=font_large)
-    msg_width = bbox[2] - bbox[0]
-    draw.text(((width - msg_width) // 2, y_pos), success_msg, fill=0, font=font_large)
-    y_pos += 30
-
-    # Instructions
-    instructions = [
-        "Your device is now connected",
-        "to the WiFi network.",
-        "",
-        "You can close the setup",
-        "browser window.",
-    ]
-
-    for instruction in instructions:
-        if instruction:  # Skip empty lines
-            bbox = draw.textbbox((0, 0), instruction, font=font_small)
-            inst_width = bbox[2] - bbox[0]
-            draw.text(
-                ((width - inst_width) // 2, y_pos), instruction, fill=0, font=font_small
-            )
-        y_pos += 16
-
-    # Footer
-    footer_y = height - 15
-    footer_text = "WiFi Setup Complete"
-    bbox = draw.textbbox((0, 0), footer_text, font=font_small)
-    footer_width = bbox[2] - bbox[0]
-    draw.text(
-        ((width - footer_width) // 2, footer_y), footer_text, fill=0, font=font_small
-    )
+    draw.line([margin, y, width - margin, y], fill=0, width=1)
+    y += 8
+    
+    # === MIDDLE SECTION - Connection Details ===
+    # Network name (prominent, centered)
+    network_label = "Connected to:"
+    label_bbox = draw.textbbox((0, 0), network_label, font=font_tiny)
+    label_width = label_bbox[2] - label_bbox[0]
+    label_x = center_x - (label_width // 2)
+    draw.text((label_x, y), network_label, fill=0, font=font_tiny)
+    y += 12
+    
+    # SSID (large, centered)
+    ssid_display = ssid if len(ssid) <= 20 else ssid[:17] + "..."
+    ssid_bbox = draw.textbbox((0, 0), ssid_display, font=font_medium)
+    ssid_width = ssid_bbox[2] - ssid_bbox[0]
+    ssid_x = center_x - (ssid_width // 2)
+    draw.text((ssid_x, y), ssid_display, fill=0, font=font_medium)
+    y += 18
+    
+    # IP Address (centered)
+    ip_label = f"IP: {ip_address}"
+    ip_bbox = draw.textbbox((0, 0), ip_label, font=font_small)
+    ip_width = ip_bbox[2] - ip_bbox[0]
+    ip_x = center_x - (ip_width // 2)
+    draw.text((ip_x, y), ip_label, fill=0, font=font_small)
+    y += 18
+    
+    # === BOTTOM SECTION - Status and Actions ===
+    # Separator line
+    draw.line([margin, y, width - margin, y], fill=0, width=1)
+    y += 6
+    
+    # Status indicators (horizontal layout)
+    # Left side: Ready status
+    ready_icon = "●"
+    draw.text((margin, y), ready_icon, fill=0, font=font_small)
+    draw.text((margin + 15, y), "Device Ready", fill=0, font=font_tiny)
+    
+    # Right side: Setup complete
+    complete_text = "Setup Complete"
+    complete_bbox = draw.textbbox((0, 0), complete_text, font=font_tiny)
+    complete_width = complete_bbox[2] - complete_bbox[0]
+    draw.text((width - margin - complete_width, y), complete_text, fill=0, font=font_tiny)
+    
+    y += 12
+    
+    # Web access info (centered)
+    web_url = f"http://{ip_address}:8080"
+    if len(web_url) > 25:
+        web_display = f"{ip_address}:8080"
+    else:
+        web_display = web_url
+    
+    web_bbox = draw.textbbox((0, 0), web_display, font=font_tiny)
+    web_width = web_bbox[2] - web_bbox[0]
+    web_x = center_x - (web_width // 2)
+    draw.text((web_x, y), web_display, fill=0, font=font_tiny)
+    
+    # Clean border
+    draw.rectangle([0, 0, width - 1, height - 1], outline=0, width=2)
 
     # Save the image
     img.save(filename)
@@ -716,8 +677,8 @@ def main():
         action="store_true",
         help="Only display on e-ink, do not save image file",
     )
-    parser.add_argument("--width", type=int, default=240, help="Image width")
-    parser.add_argument("--height", type=int, default=416, help="Image height")
+    parser.add_argument("--width", type=int, default=250, help="Image width")
+    parser.add_argument("--height", type=int, default=128, help="Image height")
     parser.add_argument(
         "--setup",
         action="store_true",

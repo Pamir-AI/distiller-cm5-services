@@ -3,15 +3,22 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Connection Status - Distiller WiFi Setup</title>
+    <title>Connection Status</title>
     <link rel="icon" href="{{ url_for('static', filename='images/pamir-logo-01.svg') }}">
     <style>
+        @font-face {
+            font-family: 'MartianMono';
+            src: url('{{ url_for("static", filename="fonts/MartianMonoNerdFont-CondensedBold.ttf") }}') format('truetype');
+            font-weight: bold;
+            font-style: normal;
+        }
+        
         * {
             box-sizing: border-box;
         }
         
         body {
-            font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+            font-family: 'MartianMono', 'Courier New', 'Monaco', 'Menlo', monospace;
             background: #ffffff;
             color: #000000;
             min-height: 100vh;
@@ -45,13 +52,6 @@
             letter-spacing: 1px;
         }
         
-        .header .subtitle {
-            margin: 8px 0 0 0;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
         .content {
             padding: 30px 20px;
             text-align: center;
@@ -60,40 +60,17 @@
         .status-icon {
             font-size: 48px;
             margin-bottom: 20px;
-            font-family: monospace;
-        }
-        
-        .status-connected {
+            font-family: 'MartianMono', monospace;
             color: #000000;
         }
         
-        .status-connecting {
+        .status-code {
+            font-size: 16px;
+            font-weight: bold;
             color: #000000;
-            animation: blink 1s infinite;
-        }
-        
-        .status-error {
-            color: #000000;
-        }
-        
-        @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0.3; }
-        }
-        
-        .spinner {
-            border: 3px solid #ffffff;
-            border-top: 3px solid #000000;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 2s linear infinite;
-            margin: 20px auto;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            margin-bottom: 15px;
+            font-family: 'MartianMono', monospace;
+            letter-spacing: 1px;
         }
         
         .status-title {
@@ -145,324 +122,130 @@
         .detail-value {
             color: #000000;
             text-align: right;
-            font-family: monospace;
-        }
-        
-        .button-group {
-            margin-top: 25px;
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-        }
-        
-        .btn {
-            display: inline-block;
-            padding: 12px 20px;
-            border: 2px solid #000000;
-            background: #ffffff;
-            color: #000000;
-            font-size: 12px;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            cursor: pointer;
-            text-decoration: none;
-            transition: all 0.2s ease;
-            font-family: 'Courier New', monospace;
-        }
-        
-        .btn-primary {
-            background: #000000;
-            color: #ffffff;
-        }
-        
-        .btn-primary:hover {
-            background: #333333;
-            text-decoration: none;
-            color: #ffffff;
-        }
-        
-        .btn-secondary:hover {
-            background: #f0f0f0;
-            text-decoration: none;
-            color: #000000;
-        }
-        
-        .redirect-message {
-            background: #f0f0f0;
-            color: #000000;
-            padding: 15px;
-            border: 2px solid #000000;
-            margin: 20px 0;
-            text-align: left;
-            font-size: 12px;
-        }
-        
-        .redirect-message strong {
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            font-family: 'MartianMono', monospace;
         }
         
         .footer {
             text-align: center;
-            padding: 15px;
-            color: #f8f8f8;
+            padding: 20px;
+            color: #ffffff;
             font-size: 10px;
-            border-top: 2px solid #ffffff;
+            border-top: 3px solid #000000;
             background: #000000;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            position: relative;
         }
         
-        .footer a {
-            color: #f8f8f8;
-            text-decoration: underline;
+        .footer::before {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: repeating-linear-gradient(
+                90deg,
+                #000000,
+                #000000 8px,
+                #ffffff 8px,
+                #ffffff 16px
+            );
         }
         
-        .auto-refresh {
-            font-size: 12px;
-            color: #666666;
-            margin-top: 15px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+        .footer-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
-    </style>
-    <script>
-        // Auto-refresh for connecting status
-        {% if connecting %}
-        setTimeout(function() {
-            location.reload();
-        }, 3000);
-        {% endif %}
         
-        // Auto-refresh for initializing state (network change)
-        {% if current_state == "initializing" %}
-        // First try to reload the page a couple times
-        var reloadCount = parseInt(sessionStorage.getItem('reloadCount') || '0');
-        if (reloadCount < 3) {
-            sessionStorage.setItem('reloadCount', (reloadCount + 1).toString());
-            setTimeout(function() {
-                location.reload();
-            }, 2000);
-        } else {
-            // After 3 reloads, redirect to hotspot setup with fallback
-            sessionStorage.removeItem('reloadCount');
-            setTimeout(function() {
-                tryHotspotRedirect();
-            }, 5000);
+        .footer-logo {
+            height: 48px;
+            width: auto;
+            filter: brightness(0) invert(1);
         }
-        {% endif %}
         
-        function tryHotspotRedirect() {
-            var urls = [
-                "http://localhost:{{ web_port }}",
-                "http://127.0.0.1:{{ web_port }}",
-                "http://192.168.4.1:{{ web_port }}"
-            ];
-            
-            function attemptRedirect(index) {
-                if (index >= urls.length) {
-                    console.error("All hotspot redirect attempts failed");
-                    return;
-                }
-                
-                var url = urls[index];
-                var img = new Image();
-                
-                img.onload = function() {
-                    window.location.href = url;
-                };
-                
-                img.onerror = function() {
-                    console.log("Failed to reach " + url + ", trying next...");
-                    attemptRedirect(index + 1);
-                };
-                
-                // Test connectivity by trying to load a small resource
-                img.src = url + "/static/images/pamir-logo-01.svg?" + Date.now();
+        .footer-text {
+            font-size: 10px;
+            letter-spacing: 0.3px;
+        }
+        
+        /* Mobile responsiveness */
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
             }
             
-            attemptRedirect(0);
+            .container {
+                max-width: 100%;
+                border-width: 2px;
+            }
+            
+            .header {
+                padding: 15px;
+            }
+            
+            .header h1 {
+                font-size: 16px;
+            }
+            
+            .content {
+                padding: 20px 15px;
+            }
+            
+            .status-icon {
+                font-size: 40px;
+            }
+            
+            .footer-content {
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            .footer-logo {
+                height: 40px;
+            }
         }
-        
-        // Auto-refresh every 10 seconds for general status updates
-        {% if not connected and not connecting and current_state != "initializing" %}
-        setTimeout(function() {
-            location.reload();
-        }, 10000);
-        {% endif %}
-
-        // Handle redirect to new IP after successful connection (only if not hotspot and not already on new IP)
-        {% if connected and ip_address and ip_address not in ["192.168.4.1", "localhost", "127.0.0.1"] %}
-        // Only redirect if we're not already on the target IP
-        if (window.location.hostname !== "{{ ip_address }}") {
-            setTimeout(function() {
-                window.location.href = "http://{{ ip_address }}:{{ web_port }}";
-            }, 5000);
-        }
-        {% endif %}
-    </script>
+    </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>Connection Status</h1>
-            <p class="subtitle">{{ device_name }} WiFi Setup</p>
         </div>
         
         <div class="content">
-            {% if connected %}
-                <div class="status-icon status-connected">[OK]</div>
-                <div class="status-title">Connected Successfully!</div>
-                <div class="status-message">
-                    {% if ssid %}
-                        Your {{ device_name }} is now connected to "{{ ssid }}".
-                    {% else %}
-                        Your {{ device_name }} is now connected to the internet.
-                    {% endif %}
-                </div>
-                
-                {% if ip_address and ip_address not in ["192.168.4.1", "localhost", "127.0.0.1"] %}
-                <div class="redirect-message" id="redirect-message">
-                    If not redirected automatically, <a href="http://{{ ip_address }}:{{ web_port }}">click here</a> to access the dashboard.
-                </div>
-                <script>
-                    // Hide redirect message if already on target IP
-                    if (window.location.hostname === "{{ ip_address }}") {
-                        document.getElementById('redirect-message').style.display = 'none';
-                    }
-                </script>
-                {% endif %}
-                
-                {% if ssid or ip_address %}
-                <div class="connection-details">
-                    {% if ssid %}
-                    <div class="detail-row">
-                        <span class="detail-label">Network:</span>
-                        <span class="detail-value">{{ ssid }}</span>
-                    </div>
-                    {% endif %}
-                    {% if ip_address %}
-                    <div class="detail-row">
-                        <span class="detail-label">IP Address:</span>
-                        <span class="detail-value">{{ ip_address }}</span>
-                    </div>
-                    {% endif %}
-                    {% if interface %}
-                    <div class="detail-row">
-                        <span class="detail-label">Interface:</span>
-                        <span class="detail-value">{{ interface }}</span>
-                    </div>
-                    {% endif %}
-                    {% if ip_address and ip_address not in ["192.168.4.1", "localhost", "127.0.0.1"] %}
-                    <div class="detail-row">
-                        <span class="detail-label">Dashboard:</span>
-                        <span class="detail-value">{{ ip_address }}:{{ web_port }}</span>
-                    </div>
-                    {% endif %}
-                </div>
-                {% endif %}
-                
-                <div class="button-group">
-                    {% if ip_address and ip_address not in ["192.168.4.1", "localhost", "127.0.0.1"] %}
-                    <a href="http://{{ ip_address }}:{{ web_port }}" class="btn btn-primary">Go to Dashboard</a>
-                    {% endif %}
-                    <a href="{{ url_for('change_network') }}" class="btn btn-secondary">Change Network</a>
-                </div>
-                
-            {% elif connecting %}
-                <div class="status-icon status-connecting">[...]</div>
-                <div class="spinner"></div>
-                <div class="status-title">Connecting...</div>
-                <div class="status-message">
-                    {% if target_ssid %}
-                        Connecting to "{{ target_ssid }}"...
-                    {% else %}
-                        Please wait while your {{ device_name }} connects to the network.
-                    {% endif %}
-                    This may take up to 60 seconds.
-                </div>
-                
-                <div class="auto-refresh">
-                    Status will update automatically...
-                </div>
-                
-            {% elif current_state == "initializing" %}
-                <div class="status-icon status-connecting">[...]</div>
-                <div class="spinner"></div>
-                <div class="status-title">Changing Network...</div>
-                <div class="status-message">
-                    <strong>Step 1:</strong> Disconnecting from current network...<br>
-                    <strong>Step 2:</strong> Starting setup hotspot...<br><br>
-                    <strong>Important:</strong> You will lose connection briefly. 
-                    Please reconnect to the "<strong>DistillerSetup</strong>" WiFi network 
-                    and visit <strong>localhost:{{ web_port }}</strong> or <strong>192.168.4.1:{{ web_port }}</strong> to continue setup.
-                </div>
-                
-                <div class="connection-details">
-                    <div class="detail-row">
-                        <span class="detail-label">Setup Network:</span>
-                        <span class="detail-value">DistillerSetup</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Setup Password:</span>
-                        <span class="detail-value">setup123</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Setup URL:</span>
-                        <span class="detail-value">localhost:{{ web_port }} or 192.168.4.1:{{ web_port }}</span>
-                    </div>
-                </div>
-                
-                <div class="auto-refresh">
-                    This page will attempt to redirect automatically...
-                </div>
-                
-            {% elif error %}
-                <div class="status-icon status-error">[ERR]</div>
-                <div class="status-title">Connection Failed</div>
-                <div class="status-message">
-                    {{ error }}
-                </div>
-                
-                <div class="button-group">
-                    <a href="{{ url_for('index') }}" class="btn btn-primary">Try Again</a>
-                </div>
-                
-            {% else %}
-                <div class="status-icon status-error">[?]</div>
-                <div class="status-title">Unknown Status</div>
-                <div class="status-message">
-                    Unable to determine connection status.
-                </div>
-                
-                <div class="button-group">
-                    <a href="{{ url_for('index') }}" class="btn btn-primary">Back to Setup</a>
-                </div>
-            {% endif %}
+            {% if status.connected and status.ssid %}
+            <div class="status-code">[OK]</div>
+            <div class="status-title">Connected</div>
+            <div class="status-message">Successfully connected to network.</div>
             
-            {% if current_state and current_state != "connected" %}
             <div class="connection-details">
                 <div class="detail-row">
-                    <span class="detail-label">State:</span>
-                    <span class="detail-value">{{ current_state.replace('_', ' ').title() }}</span>
+                    <span class="detail-label">Network</span>
+                    <span class="detail-value">{{ status.ssid }}</span>
                 </div>
-                {% if elapsed and elapsed > 0 %}
+                {% if status.ip_address %}
                 <div class="detail-row">
-                    <span class="detail-label">Elapsed:</span>
-                    <span class="detail-value">{{ "%.1f"|format(elapsed) }}s</span>
+                    <span class="detail-label">IP Address</span>
+                    <span class="detail-value">{{ status.ip_address }}</span>
                 </div>
                 {% endif %}
             </div>
+            
+            {% else %}
+            <div class="status-code">[DISCONNECTED]</div>
+            <div class="status-title">Not Connected</div>
+            <div class="status-message">Device is not connected to a network.</div>
             {% endif %}
         </div>
         
         <div class="footer">
-            <p>
-                {{ device_name }} by
-                <img src="{{ url_for('static', filename='images/pamir-logo-01.svg') }}" alt="Pamir AI" style="height: 48px; width: auto; vertical-align: middle; margin-right: 8px;">
-            </p>
-            <p><a href="javascript:location.reload()">Refresh Status</a></p>
+            <div class="footer-content">
+                <img src="{{ url_for('static', filename='images/pamir-logo-01.svg') }}" alt="Pamir AI" class="footer-logo">
+                <span class="footer-text">{{ device_name }} Network Status</span>
+            </div>
         </div>
     </div>
 </body>
