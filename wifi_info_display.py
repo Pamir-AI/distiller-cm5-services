@@ -454,7 +454,7 @@ def create_wifi_setup_image(
         draw.rectangle([qr_x, qr_y, qr_x + qr_size, qr_y + qr_size], outline=0, width=1)
         draw.text((qr_x + 15, qr_y + 28), "Scan to", fill=0, font=font_tiny)
         draw.text((qr_x + 15, qr_y + 40), "Connect", fill=0, font=font_tiny)
-    
+
     # === BOTTOM SECTION - Browser Instructions ===
     y = height - 35
     

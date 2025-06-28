@@ -22,6 +22,11 @@ if [ "$EUID" -ne 0 ]; then
 	exit 1
 fi
 
+# Install system dependencies
+echo "Installing system dependencies..."
+apt-get update -qq
+apt-get install -y avahi-daemon avahi-utils libnss-mdns
+
 # Create installation directory
 echo "Creating installation directory: $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
@@ -70,6 +75,11 @@ chmod 644 "$SYSTEMD_DIR/$SERVICE_FILE"
 echo "Configuring systemd service..."
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
+
+# Enable and start Avahi daemon for mDNS
+echo "Configuring Avahi daemon for mDNS..."
+systemctl enable avahi-daemon
+systemctl start avahi-daemon
 
 echo ""
 echo "Installation complete!"

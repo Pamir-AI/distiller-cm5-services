@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Connect to {{ ssid }}</title>
     <link rel="icon" href="{{ url_for('static', filename='images/pamir-logo-01.svg') }}">
+    <!-- Allow insecure HTTP requests for local IoT device operation -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http: https:;
+        connect-src 'self' http: https: ws: wss:;
+        img-src 'self' data: blob: http: https:;
+        font-src 'self' data: http: https:;
+        frame-src 'none';
+        object-src 'none'
+    ">
     <style>
         @font-face {
             font-family: 'MartianMono';

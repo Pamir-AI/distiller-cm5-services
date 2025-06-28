@@ -343,12 +343,18 @@ class SimpleEinkDriver:
             self.RK_DC_PIN = "GPIO1_C6"
             self.RK_RST_PIN = "GPIO1_B1"
             self.RK_BUSY_PIN = "GPIO0_D3"
-            self.RockGPIO = RockGPIO()
+            try:
+                self.RockGPIO = RockGPIO()
+            except Exception as e:
+                logger.error(f"Failed to initialize RockGPIO: {e}")
+                self.RockGPIO = None
         else:
             self.DC_PIN = 7
             self.RST_PIN = 13
             self.BUSY_PIN = 9
             self.lgpio_handle = None
+            # Always define RockGPIO attribute even on non-Rock platforms
+            self.RockGPIO = None
 
         self.spi = None
         self.initialized = False
@@ -382,9 +388,12 @@ class SimpleEinkDriver:
             lgpio.gpio_claim_output(self.lgpio_handle, self.RST_PIN, 0)
             lgpio.gpio_claim_input(self.lgpio_handle, self.BUSY_PIN, lgpio.SET_PULL_UP)
         else:
-            self.RockGPIO.setup(self.RK_DC_PIN, Direction.OUTPUT)
-            self.RockGPIO.setup(self.RK_RST_PIN, Direction.OUTPUT)
-            self.RockGPIO.setup(self.RK_BUSY_PIN, Direction.INPUT, bias=Bias.PULL_UP)
+            if self.RockGPIO:
+                self.RockGPIO.setup(self.RK_DC_PIN, Direction.OUTPUT)
+                self.RockGPIO.setup(self.RK_RST_PIN, Direction.OUTPUT)
+                self.RockGPIO.setup(self.RK_BUSY_PIN, Direction.INPUT, bias=Bias.PULL_UP)
+            else:
+                raise Exception("RockGPIO not available - GPIO hardware may not be accessible")
 
         # Initialize SPI
         self.spi = spidev.SpiDev()
@@ -416,7 +425,7 @@ class SimpleEinkDriver:
         # Set DC pin low for command
         if _RPI:
             lgpio.gpio_write(self.lgpio_handle, self.DC_PIN, 0)
-        elif _ROCK:
+        elif _ROCK and self.RockGPIO:
             self.RockGPIO.output(self.RK_DC_PIN, Value.INACTIVE)
 
         self.spi.xfer2([command])
@@ -428,7 +437,7 @@ class SimpleEinkDriver:
         # Set DC pin high for data
         if _RPI:
             lgpio.gpio_write(self.lgpio_handle, self.DC_PIN, 1)
-        elif _ROCK:
+        elif _ROCK and self.RockGPIO:
             self.RockGPIO.output(self.RK_DC_PIN, Value.ACTIVE)
 
         if isinstance(data, int):
@@ -445,7 +454,7 @@ class SimpleEinkDriver:
             time.sleep(0.02)
             lgpio.gpio_write(self.lgpio_handle, self.RST_PIN, 1)
             time.sleep(0.02)
-        elif _ROCK:
+        elif _ROCK and self.RockGPIO:
             self.RockGPIO.output(self.RK_RST_PIN, Value.INACTIVE)
             time.sleep(0.02)
             self.RockGPIO.output(self.RK_RST_PIN, Value.ACTIVE)
@@ -456,7 +465,7 @@ class SimpleEinkDriver:
         if _RPI:
             while lgpio.gpio_read(self.lgpio_handle, self.BUSY_PIN) == 0:
                 time.sleep(0.01)
-        elif _ROCK:
+        elif _ROCK and self.RockGPIO:
             while self.RockGPIO.input(self.RK_BUSY_PIN) == Value.INACTIVE:
                 time.sleep(0.01)
 

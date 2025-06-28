@@ -8,6 +8,15 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+    <!-- Allow insecure HTTP requests for local IoT device operation -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http: https:;
+        connect-src 'self' http: https: ws: wss:;
+        img-src 'self' data: blob: http: https:;
+        font-src 'self' data: http: https:;
+        frame-src 'none';
+        object-src 'none'
+    ">
     
     <style>
         @font-face {
@@ -265,8 +274,11 @@
                 return;
             }
             
-            // After 10 seconds, assume hotspot is down and start network discovery
-            if (elapsed > 10000 && connectionPhase === 'starting') {
+            // Trigger network discovery much more aggressively
+            var timeSinceLastCheck = Date.now() - lastSuccessfulCheck;
+            if ((elapsed > 6000 || timeSinceLastCheck > 5000) && connectionPhase === 'starting') {
+                console.log('Triggering network discovery due to timeout or no status updates');
+                console.log('Elapsed:', elapsed, 'ms, Time since last check:', timeSinceLastCheck, 'ms');
                 connectionPhase = 'discovering';
                 clearInterval(statusCheckInterval);
                 discoverNewNetwork();
@@ -299,9 +311,13 @@
             fetch(endpoint, {
                 method: 'GET',
                 headers: {
-                    'Cache-Control': 'no-cache'
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
                 },
-                timeout: 5000
+                timeout: 5000,
+                // Explicitly allow insecure requests for local IoT device
+                credentials: 'same-origin',
+                mode: 'cors'
             })
             .then(response => {
                 if (!response.ok) {
@@ -318,25 +334,63 @@
                 }
             })
             .catch(error => {
-                setTimeout(() => tryStatusEndpoint(index + 1, endpoints), 500);
+                console.log('Status check failed for endpoint', endpoint, ':', error.message);
+                // If this was the last endpoint and we're in connecting phase for a while,
+                // trigger network discovery
+                if (index === endpoints.length - 1 && Date.now() - connectionStartTime > 5000) {
+                    console.log('All endpoints failed after 5s, starting discovery immediately');
+                    clearInterval(statusCheckInterval);
+                    discoverNewNetwork();
+                } else {
+                    setTimeout(() => tryStatusEndpoint(index + 1, endpoints), 300);
+                }
             });
         }
         
         function handleStatusResponse(data) {
-            if (data.connected_to_target && data.current_state === 'connected' && data.redirect_url) {
+            console.log('Status response received:', JSON.stringify(data, null, 2));
+            
+            // Store device information for mDNS discovery
+            if (data.device_id) {
+                try {
+                    localStorage.setItem('distiller_device_id', data.device_id);
+                } catch(e) {
+                    console.log('Could not store device ID');
+                }
+            }
+            
+            // SIMPLIFIED LOGIC: If connected to target network, IMMEDIATELY redirect
+            if (data.connected_to_target === true) {
                 connectionPhase = 'connected';
                 updateConnectionStatus('Connected');
-                showSuccessWithRedirect(data.redirect_url, data.ip_address);
-            } else if (data.connected_to_target && data.ip_address) {
-                connectionPhase = 'connected';
-                updateConnectionStatus('Connected');
-                var redirectUrl = 'http://' + data.ip_address + ':{{ web_port }}';
-                showSuccessWithRedirect(redirectUrl, data.ip_address);
-            } else if (data.connected_to_hotspot && data.current_state === 'hotspot_mode') {
+                
+                console.log('Connected to target network! Redirecting immediately...');
+                
+                // Build redirect URL (prefer redirect_url, fallback to IP, then mDNS)
+                var redirectUrl;
+                if (data.redirect_url) {
+                    redirectUrl = data.redirect_url + '/status';
+                } else if (data.ip_address) {
+                    redirectUrl = 'http://' + data.ip_address + ':{{ web_port }}/status';
+                } else if (data.mdns_url) {
+                    redirectUrl = data.mdns_url + '/status';
+                } else {
+                    redirectUrl = '/status'; // fallback
+                }
+                
+                console.log('Redirecting to:', redirectUrl);
+                showSuccessWithRedirect(redirectUrl, data.ip_address || 'device');
+                return;
+            }
+            
+            // Check for other states
+            if (data.connected_to_hotspot && data.current_state === 'hotspot_mode') {
                 updateConnectionStatus('Connection Failed');
                 showError('Connection failed. Please check your password and try again.');
             } else if (data.current_state === 'connecting') {
                 updateStatusMessage('Connecting to network...');
+            } else {
+                updateStatusMessage('Checking connection status...');
             }
         }
         
@@ -349,13 +403,25 @@
         }
         
         function showSuccessWithRedirect(redirectUrl, ipAddress) {
+            console.log('Showing success and redirecting to:', redirectUrl);
+            
             document.getElementById('status-code').textContent = '[CONNECTED]';
             document.getElementById('status-title').textContent = 'Connected!';
-            document.getElementById('status-message').textContent = 'Successfully connected to network.';
+            document.getElementById('status-message').innerHTML = 
+                'Successfully connected to network!<br>' +
+                'Redirecting to device status page...<br>' +
+                '<small>If redirect fails, go to: ' + redirectUrl + '</small>';
             
+            // Clear any existing intervals
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+            
+            // Redirect immediately (1 second delay for user to see success message)
             setTimeout(() => {
+                console.log('Executing redirect to:', redirectUrl);
                 window.location.href = redirectUrl;
-            }, 3000);
+            }, 1000);
         }
         
         function showError(message) {
@@ -377,78 +443,202 @@
             
             console.log('Current hostname:', currentHostname);
             
-            // If we're on the hotspot IP, try to discover the new network IP
+            // If we're on the hotspot IP, try to discover the new network
             if (currentHostname.startsWith('192.168.4.') || currentHostname === '192.168.4.1') {
-                // Try most common IP addresses across different network ranges
-                // Start with 192.168.1.7 since that's what the device got in the logs
-                var commonIPs = [
-                    // Prioritize the IP we saw in the logs
-                    '192.168.1.7',
-                    // Other common 192.168.1.x addresses
-                    '192.168.1.1', '192.168.1.2', '192.168.1.10', '192.168.1.100', 
-                    '192.168.1.5', '192.168.1.3', '192.168.1.4', '192.168.1.6',
-                    '192.168.1.8', '192.168.1.9', '192.168.1.11', '192.168.1.12',
-                    // 192.168.0.x range  
-                    '192.168.0.1', '192.168.0.2', '192.168.0.10', '192.168.0.100',
-                    '192.168.0.7', '192.168.0.5', '192.168.0.3', '192.168.0.4',
-                    // 10.0.0.x range
-                    '10.0.0.1', '10.0.0.2', '10.0.0.10', '10.0.0.100',
-                    '10.0.0.7', '10.0.0.5', '10.0.0.3', '10.0.0.4',
-                    // 172.16.0.x range
-                    '172.16.0.1', '172.16.0.2', '172.16.0.10', '172.16.0.100'
-                ];
-                
-                tryDiscoverCommonIPs(commonIPs, possiblePorts, 0, 0);
+                // First try mDNS-based discovery
+                tryMdnsDiscovery(function(success) {
+                    if (!success) {
+                        console.log('mDNS discovery failed, falling back to IP scanning');
+                        // Fallback to IP scanning if mDNS fails
+                        tryIpRangeDiscovery();
+                    }
+                });
             } else {
                 // Try current hostname first
                 tryDiscoverDevice(currentHostname, possiblePorts, 0);
             }
         }
         
-        function tryDiscoverCommonIPs(ips, ports, ipIndex, portIndex) {
-            if (ipIndex >= ips.length) {
-                // All IPs exhausted for current port, try next port
-                if (portIndex + 1 < ports.length) {
-                    tryDiscoverCommonIPs(ips, ports, 0, portIndex + 1);
-                } else {
-                    // All combinations exhausted, fall back to home page
-                    console.log('Network discovery failed, redirecting to home page');
-                    setTimeout(() => {
-                        window.location.href = '/';
-                    }, 3000);
+        function tryMdnsDiscovery(callback) {
+            console.log('Attempting mDNS discovery...');
+            updateStatusMessage('Looking for device via mDNS...');
+            
+            // Try to construct the likely mDNS name
+            // Since we don't know the exact device ID from browser, we'll try common patterns
+            var mdnsAttempts = [
+                'distiller-setup.local',
+                'distiller.local'
+            ];
+            
+            // Also try to get device ID from previous interactions if available
+            try {
+                var storedDeviceId = localStorage.getItem('distiller_device_id');
+                if (storedDeviceId) {
+                    mdnsAttempts.unshift(storedDeviceId + '.local');
                 }
-                return;
+            } catch(e) {
+                console.log('No stored device ID');
             }
             
-            var ip = ips[ipIndex];
-            var port = ports[portIndex];
-            var testUrl = 'http://' + ip + ':' + port + '/api/status';
+            var attempts = 0;
+            var maxAttempts = mdnsAttempts.length;
+            var foundDevice = false;
             
-            console.log('Trying to discover device at: ' + testUrl);
-            
-            // Create a promise that will timeout after 1 second for faster discovery
-            var timeoutPromise = new Promise((resolve, reject) => {
-                setTimeout(() => reject(new Error('timeout')), 1000);
-            });
-            
-            Promise.race([
-                fetch(testUrl, { method: 'GET' }),
-                timeoutPromise
-            ])
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Response from ' + ip + ':' + port, data);
-                    if (data.success && data.connected_to_target) {
-                        console.log('Found device at ' + ip + ':' + port + ', redirecting...');
-                        showSuccessWithRedirect('http://' + ip + ':' + port, ip);
-                    } else {
-                        tryDiscoverCommonIPs(ips, ports, ipIndex + 1, portIndex);
-                    }
-                })
-                .catch((error) => {
-                    console.log('Failed to reach ' + ip + ':' + port + ' - ' + error.message);
-                    tryDiscoverCommonIPs(ips, ports, ipIndex + 1, portIndex);
+            function tryNextMdns() {
+                if (attempts >= maxAttempts || foundDevice) {
+                    callback(foundDevice);
+                    return;
+                }
+                
+                var mdnsName = mdnsAttempts[attempts];
+                attempts++;
+                
+                console.log('Trying mDNS name:', mdnsName);
+                
+                var testUrl = 'http://' + mdnsName + ':{{ web_port }}';
+                
+                // Create a promise that will timeout after 3 seconds
+                var timeoutPromise = new Promise((resolve, reject) => {
+                    setTimeout(() => reject(new Error('timeout')), 3000);
                 });
+                
+                Promise.race([
+                    fetch(testUrl + '/api/status', { 
+                        method: 'GET',
+                        headers: {
+                            'Cache-Control': 'no-cache',
+                            'Pragma': 'no-cache'
+                        },
+                        credentials: 'same-origin',
+                        mode: 'cors'
+                    }),
+                    timeoutPromise
+                ])
+                    .then(response => {
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('mDNS response from ' + mdnsName + ':', data);
+                        if (data.success && data.connected_to_target) {
+                            foundDevice = true;
+                            console.log('SUCCESS! Found device via mDNS:', mdnsName);
+                            
+                            // Store device hostname for future use
+                            try {
+                                var deviceId = mdnsName.replace('.local', '');
+                                localStorage.setItem('distiller_device_id', deviceId);
+                            } catch(e) {
+                                console.log('Could not store device ID');
+                            }
+                            
+                            var redirectUrl = data.redirect_url || (testUrl + '/status');
+                            showSuccessWithRedirect(redirectUrl, mdnsName);
+                            callback(true);
+                        } else {
+                            setTimeout(tryNextMdns, 500);
+                        }
+                    })
+                    .catch((error) => {
+                        console.log('mDNS test failed for ' + mdnsName + ':', error.message);
+                        setTimeout(tryNextMdns, 500);
+                    });
+            }
+            
+            tryNextMdns();
+        }
+        
+        function tryIpRangeDiscovery() {
+            // Fallback to IP scanning when mDNS fails
+            console.log('Starting IP range discovery...');
+            updateStatusMessage('Scanning network for device...');
+            
+            // Try common network ranges and IP patterns to find the device
+            // Prioritize the most likely IPs first based on actual connection logs
+            var testIPs = [
+                // HIGHEST PRIORITY: IPs that have worked before
+                '192.168.1.7', '192.168.226.137', 
+                
+                // COMMON ROUTER DEFAULT RANGES
+                '192.168.1.100', '192.168.1.101', '192.168.1.102', '192.168.1.103', '192.168.1.105',
+                '192.168.0.100', '192.168.0.101', '192.168.0.102', '192.168.0.103', 
+                
+                // MOBILE HOTSPOT RANGES  
+                '192.168.43.100', '192.168.43.101', '192.168.43.1', '192.168.43.2',
+                '192.168.226.100', '192.168.226.101', '192.168.226.102',
+                
+                // OTHER COMMON RANGES
+                '192.168.2.100', '192.168.2.101', '10.0.0.100', '10.0.0.101', 
+                '172.16.0.100', '172.16.0.101'
+            ];
+            
+            var foundDevice = false;
+            var attempts = 0;
+            var maxAttempts = testIPs.length;
+            
+            testIPs.forEach(function(testIP, index) {
+                setTimeout(function() {
+                    if (foundDevice) return; // Skip if already found
+                    
+                    var testUrl = 'http://' + testIP + ':{{ web_port }}';
+                    console.log('Testing IP:', testIP);
+                    
+                    fetch(testUrl + '/api/status', {
+                        method: 'GET',
+                        headers: {
+                            'Cache-Control': 'no-cache',
+                            'Pragma': 'no-cache'
+                        },
+                        credentials: 'same-origin',
+                        mode: 'cors',
+                        timeout: 3000
+                    })
+                    .then(response => {
+                        console.log('Response from', testIP, '- Status:', response.status);
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('API response from', testIP, ':', JSON.stringify(data, null, 2));
+                        
+                        if (data.success && data.connected_to_target && data.current_state === 'connected' && !foundDevice) {
+                            foundDevice = true;
+                            console.log('SUCCESS! Found device at:', testIP);
+                            clearInterval(statusCheckInterval); // Stop any polling
+                            
+                            // Immediately redirect browser to the working device URL
+                            var redirectUrl = data.redirect_url || (testUrl + '/status');
+                            console.log('Redirecting browser to:', redirectUrl);
+                            
+                            showSuccessWithRedirect(redirectUrl, testIP);
+                        }
+                    })
+                    .catch(error => {
+                        console.log('Test failed for', testIP, ':', error.message);
+                        attempts++;
+                        if (attempts >= maxAttempts && !foundDevice) {
+                            console.log('All discovery attempts failed, showing fallback');
+                            setTimeout(showConnectionFallback, 2000);
+                        }
+                    });
+                }, index * 50); // 50ms intervals between attempts (even faster scanning)
+            });
+        }
+        
+        function showConnectionFallback() {
+            updateStatusMessage('Connection completed. Checking device availability...');
+            document.getElementById('status-code').textContent = '[UNKNOWN]';
+            document.getElementById('status-title').textContent = 'Connection Status Unknown';
+            document.getElementById('status-message').innerHTML = 
+                'The connection process completed, but the device location could not be verified.<br><br>' +
+                'Try accessing the device by:<br>' +
+                '• Checking your router\'s connected devices<br>' +
+                '• Using network scanner apps<br>' +
+                '• Looking for "distiller-*.local" in your network';
+            
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 10000);
         }
         
         function tryDiscoverDevice(hostname, ports, portIndex) {
@@ -462,7 +652,16 @@
             var port = ports[portIndex];
             var testUrl = 'http://' + hostname + ':' + port + '/api/status';
             
-            fetch(testUrl, { method: 'GET', timeout: 3000 })
+            fetch(testUrl, { 
+                method: 'GET',
+                headers: {
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                },
+                credentials: 'same-origin',
+                mode: 'cors',
+                timeout: 3000 
+            })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success && data.connected_to_target) {
@@ -478,8 +677,32 @@
         
         // Start the connection monitoring
         document.addEventListener('DOMContentLoaded', function() {
-            statusCheckInterval = setInterval(updateConnectionStatus, 2000);
+            console.log('Starting connection monitoring for SSID: {{ ssid }}');
+            console.log('Hotspot IP: {{ hotspot_ip }}, Web Port: {{ web_port }}');
+            
+            // Check status every 1 second (more responsive)
+            statusCheckInterval = setInterval(updateConnectionStatus, 1000);
+            
+            // Start checking immediately
             updateConnectionStatus();
+            
+            // AGGRESSIVE BACKUP: Start network discovery much earlier
+            setTimeout(function() {
+                if (connectionPhase === 'starting') {
+                    console.log('Emergency discovery trigger after 8 seconds');
+                    clearInterval(statusCheckInterval);
+                    discoverNewNetwork();
+                }
+            }, 8000);
+            
+            // FINAL BACKUP: If still stuck after 12 seconds, force discovery
+            setTimeout(function() {
+                if (connectionPhase !== 'connected') {
+                    console.log('Final emergency discovery trigger after 12 seconds');
+                    clearInterval(statusCheckInterval);
+                    discoverNewNetwork();
+                }
+            }, 12000);
         });
     </script>
 </head>

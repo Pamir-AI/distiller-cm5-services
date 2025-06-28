@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Connection Status</title>
     <link rel="icon" href="{{ url_for('static', filename='images/pamir-logo-01.svg') }}">
+    <!-- Allow insecure HTTP requests for local IoT device operation -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http: https:;
+        connect-src 'self' http: https: ws: wss:;
+        img-src 'self' data: blob: http: https:;
+        font-src 'self' data: http: https:;
+        frame-src 'none';
+        object-src 'none'
+    ">
     <style>
         @font-face {
             font-family: 'MartianMono';
@@ -205,7 +214,7 @@
             
             .footer-logo {
                 height: 40px;
-            }
+                }
         }
     </style>
 </head>
@@ -248,5 +257,59 @@
             </div>
         </div>
     </div>
+
+    <script>
+        // Handle automatic redirection when connected to target network
+        function handleRedirection() {
+            // Check if we're connected to target network and have a redirect URL
+            {% if status.connected_to_target and status.redirect_url %}
+                // Extract current host from window.location
+                const currentHost = window.location.host;
+                const redirectUrl = "{{ status.redirect_url }}";
+                const targetUrl = new URL(redirectUrl);
+                const targetHost = targetUrl.host;
+                
+                // Only redirect if we're not already on the target IP
+                if (currentHost !== targetHost) {
+                    console.log('Redirecting from', currentHost, 'to', targetHost);
+                    // Give user a moment to see the success message, then redirect
+                    setTimeout(() => {
+                        window.location.href = redirectUrl + '/status';
+                    }, 2000);
+                } else {
+                    console.log('Already on target network:', currentHost);
+                }
+            {% elif status.connected_to_target and status.mdns_url %}
+                // Fallback to mDNS URL if available
+                const currentHost = window.location.host;
+                const mdnsUrl = "{{ status.mdns_url }}";
+                const targetUrl = new URL(mdnsUrl);
+                const targetHost = targetUrl.host;
+                
+                if (currentHost !== targetHost) {
+                    console.log('Redirecting via mDNS from', currentHost, 'to', targetHost);
+                    setTimeout(() => {
+                        window.location.href = mdnsUrl + '/status';
+                    }, 2000);
+                }
+            {% endif %}
+        }
+
+        // Auto-refresh status if we're still connecting or not on target network
+        function autoRefresh() {
+            {% if status.connecting or (status.connected_to_hotspot and not status.connected_to_target) %}
+                setTimeout(() => {
+                    console.log('Auto-refreshing status...');
+                    window.location.reload();
+                }, 3000);
+            {% endif %}
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            handleRedirection();
+            autoRefresh();
+        });
+    </script>
 </body>
 </html> 

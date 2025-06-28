@@ -19,6 +19,7 @@ from typing import Optional
 from enum import Enum
 
 from network.wifi_manager import WiFiManager
+from network.device_config import get_device_config
 
 try:
     from flask import Flask, render_template, request, jsonify, redirect, url_for
@@ -55,17 +56,20 @@ class DistillerWiFiServiceFixed:
 
     def __init__(
         self,
-        hotspot_ssid: str = "DistillerSetup",
-        hotspot_password: str = "setup123",
-        device_name: str = "Distiller",
-        web_port: int = 8080,
+        hotspot_ssid: str = None,
+        hotspot_password: str = None,
+        device_name: str = None,
+        web_port: int = None,
         enable_eink: bool = True,
     ):
-
-        self.hotspot_ssid = hotspot_ssid
-        self.hotspot_password = hotspot_password
-        self.device_name = device_name
-        self.web_port = web_port
+        # Initialize device configuration
+        self.device_config = get_device_config()
+        
+        # Use device configuration with fallbacks to parameters
+        self.hotspot_ssid = hotspot_ssid or self.device_config.get_hotspot_ssid()
+        self.hotspot_password = hotspot_password or self.device_config.get_hotspot_password()
+        self.device_name = device_name or self.device_config.get_friendly_name()
+        self.web_port = web_port or self.device_config.get_web_port()
         self.enable_eink = enable_eink and EINK_AVAILABLE
 
         # Service state
@@ -76,6 +80,8 @@ class DistillerWiFiServiceFixed:
         self.connection_start_time: Optional[float] = None
         self._connection_in_progress = False  # Flag to prevent race conditions
         self.hotspot_ip: Optional[str] = None  # Store actual hotspot IP
+        self._successful_connection_ip: Optional[str] = None  # Track successful connection IP
+        self._successful_connection_ssid: Optional[str] = None  # Track successful connection SSID
 
         # Setup logging
         self.setup_logging()
@@ -93,6 +99,10 @@ class DistillerWiFiServiceFixed:
         signal.signal(signal.SIGTERM, self._signal_handler)
 
         self.logger.info("Fixed WiFi Service initialized")
+        self.logger.info(f"Device ID: {self.device_config.get_device_id()}")
+        self.logger.info(f"Hostname: {self.device_config.get_hostname()}")
+        self.logger.info(f"Hotspot SSID: {self.hotspot_ssid}")
+        self.logger.info(f"mDNS URL: {self.device_config.get_device_mdns_url()}")
 
     def setup_logging(self):
         """Configure logging"""
@@ -136,6 +146,29 @@ class DistillerWiFiServiceFixed:
             response.cache_control.max_age = 0
             response.cache_control.no_cache = True
             response.cache_control.must_revalidate = True
+            
+            # Add security headers to handle HTTPS-Only mode and CSP
+            response.headers['X-Content-Type-Options'] = 'nosniff'
+            response.headers['X-Frame-Options'] = 'DENY'
+            response.headers['X-XSS-Protection'] = '1; mode=block'
+            
+            # Allow HTTP requests for local IoT device operation (no HTTPS upgrade)
+            response.headers['Content-Security-Policy'] = (
+                "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http: https:; "
+                "connect-src 'self' http: https: ws: wss:; "
+                "img-src 'self' data: blob: http: https:; "
+                "font-src 'self' data: http: https:; "
+                "frame-src 'none'; "
+                "object-src 'none'"
+            )
+            
+            # For local development and IoT devices, allow mixed content
+            response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+            
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+            
             return response
 
         # Routes
@@ -363,6 +396,14 @@ class DistillerWiFiServiceFixed:
         """Handle status API endpoint"""
         try:
             status_info = self._get_current_status()
+            
+            # DEBUG: Log what we're actually returning
+            self.logger.info(f"API Status response: connected_to_target={status_info.get('connected_to_target')}, "
+                            f"current_state={status_info.get('current_state')}, "
+                            f"ssid={status_info.get('ssid')}, "
+                            f"ip={status_info.get('ip_address')}, "
+                            f"redirect_url={status_info.get('redirect_url')}")
+            
             return jsonify({"success": True, **status_info})
         except Exception as e:
             self.logger.error(f"Error in API status: {e}")
@@ -445,6 +486,30 @@ class DistillerWiFiServiceFixed:
                 wifi_status = asyncio.run(self.wifi_manager.get_connection_status())
             except Exception as wifi_error:
                 self.logger.warning(f"WiFi status check failed: {wifi_error}")
+                # During network transition, if we're in CONNECTED state, trust that state
+                if self.current_state == ServiceState.CONNECTED:
+                    self.logger.info("WiFi status check failed but service state is CONNECTED - assuming successful connection")
+                    # Use stored connection info if available
+                    connection_ip = self._successful_connection_ip or self.device_config.get_device_mdns_id()
+                    connection_ssid = self._successful_connection_ssid or self.target_ssid
+                    return {
+                        "connected": True,
+                        "connected_to_target": True,  # Trust the CONNECTED state
+                        "connected_to_hotspot": False,
+                        "connecting": False,
+                        "ssid": connection_ssid,
+                        "ip_address": connection_ip,
+                        "interface": None,
+                        "current_state": self.current_state.value,
+                        "target_ssid": self.target_ssid,
+                        "elapsed": 0,
+                        "redirect_url": f"http://{connection_ip}:{self.web_port}",
+                        "timestamp": int(time.time()),
+                        "device_id": self.device_config.get_device_id(),
+                        "mdns_url": self.device_config.get_device_mdns_url(),
+                        "hostname": self.device_config.get_hostname(),
+                        "message": "Network transition in progress"
+                    }
                 # Return status based on service state when WiFi check fails
                 return self._get_fallback_status()
 
@@ -465,6 +530,12 @@ class DistillerWiFiServiceFixed:
                 and wifi_status.ip_address != self.hotspot_ip  # Not using hotspot IP
             )
 
+            # CRITICAL FIX: If we're in CONNECTED state but WiFi status doesn't show connection,
+            # trust the service state (this handles network transition timing issues)
+            if self.current_state == ServiceState.CONNECTED and not connected_to_target:
+                self.logger.info("Service state is CONNECTED but WiFi status check inconsistent - trusting service state")
+                connected_to_target = True
+
             # Check if we're connected to hotspot
             connected_to_hotspot = (
                 wifi_status.connected 
@@ -476,9 +547,15 @@ class DistillerWiFiServiceFixed:
 
             # Handle redirection after successful connection to TARGET network (not hotspot)
             redirect_url = None
-            if connected_to_target and wifi_status.ip_address:
-                # Only set redirect URL if connected to target network and we're not already on that IP
-                redirect_url = f"http://{wifi_status.ip_address}:{self.web_port}"
+            if connected_to_target:
+                if wifi_status.ip_address:
+                    redirect_url = f"http://{wifi_status.ip_address}:{self.web_port}"
+                elif self._successful_connection_ip:
+                    # Use stored connection IP
+                    redirect_url = f"http://{self._successful_connection_ip}:{self.web_port}"
+                else:
+                    # Fallback: Use mDNS if available
+                    redirect_url = self.device_config.get_device_mdns_url()
 
             return {
                 "connected": connected,
@@ -497,6 +574,9 @@ class DistillerWiFiServiceFixed:
                 ),
                 "redirect_url": redirect_url,
                 "timestamp": int(time.time()),
+                "device_id": self.device_config.get_device_id(),
+                "mdns_url": self.device_config.get_device_mdns_url(),
+                "hostname": self.device_config.get_hostname(),
             }
 
         except Exception as e:
@@ -521,6 +601,9 @@ class DistillerWiFiServiceFixed:
                 "redirect_url": None,
                 "timestamp": int(time.time()),
                 "message": "Hotspot mode active",
+                "device_id": self.device_config.get_device_id(),
+                "mdns_url": self.device_config.get_device_mdns_url(),
+                "hostname": self.device_config.get_hostname(),
             }
         elif self.current_state == ServiceState.CONNECTING:
             return {
@@ -540,6 +623,9 @@ class DistillerWiFiServiceFixed:
                 ),
                 "redirect_url": None,
                 "timestamp": int(time.time()),
+                "device_id": self.device_config.get_device_id(),
+                "mdns_url": self.device_config.get_device_mdns_url(),
+                "hostname": self.device_config.get_hostname(),
             }
         elif self.current_state == ServiceState.INITIALIZING:
             return {
@@ -640,6 +726,10 @@ class DistillerWiFiServiceFixed:
                 # Connection is stable, mark as connected
                 self.current_state = ServiceState.CONNECTED
                 self.logger.info(f"Connection to {self.target_ssid} fully established and stable")
+                
+                # CRITICAL: Store connection info for status API during transition
+                self._successful_connection_ip = status.ip_address
+                self._successful_connection_ssid = self.target_ssid
 
                 # Update e-ink display
                 if self.enable_eink:
@@ -675,6 +765,14 @@ class DistillerWiFiServiceFixed:
             if status.connected and status.ip_address:
                 self.logger.info(f"Network transition: now at {status.ip_address}")
 
+                # Use transition method to properly handle mDNS service move to new network
+                mdns_success = self.device_config.transition_mdns_to_network(status.ip_address)
+                if mdns_success:
+                    mdns_url = self.device_config.get_device_mdns_url()
+                    self.logger.info(f"mDNS service updated for new network: {mdns_url}")
+                else:
+                    self.logger.warning("Failed to update mDNS service for new network")
+
                 # Web server will continue running on all interfaces
                 # The status page will handle redirection to new IP
 
@@ -683,6 +781,10 @@ class DistillerWiFiServiceFixed:
                 self.logger.info(
                     f"Device accessible at: http://{status.ip_address}:{self.web_port}"
                 )
+                
+                # Also log mDNS URL for convenience
+                mdns_url = self.device_config.get_device_mdns_url()
+                self.logger.info(f"Device also accessible via mDNS: {mdns_url}")
 
         except Exception as e:
             self.logger.error(f"Error handling network transition: {e}")
@@ -728,6 +830,14 @@ class DistillerWiFiServiceFixed:
                 self.logger.info(
                     f"Web interface: http://{hotspot_ip}:{self.web_port}"
                 )
+                
+                # Start mDNS service for device discovery
+                mdns_success = self.device_config.start_mdns_service(hotspot_ip, self.web_port)
+                if mdns_success:
+                    mdns_url = self.device_config.get_device_mdns_url()
+                    self.logger.info(f"mDNS service started: {mdns_url}")
+                else:
+                    self.logger.warning("Failed to start mDNS service")
 
                 # Update e-ink display
                 if self.enable_eink:
@@ -777,9 +887,11 @@ class DistillerWiFiServiceFixed:
             return
 
         def run_server():
-            # Show the actual accessible IP address
+            # Show the mDNS URL for user convenience
+            mdns_url = self.device_config.get_device_mdns_url()
             accessible_ip = self.hotspot_ip or "0.0.0.0"
             self.logger.info(f"Starting web server on {accessible_ip}:{self.web_port}")
+            self.logger.info(f"Device accessible via mDNS: {mdns_url}")
             if self.app:  # Additional None check for type safety
                 self.app.run(
                     host="0.0.0.0",
@@ -1077,6 +1189,9 @@ class DistillerWiFiServiceFixed:
         self.logger.info("Cleaning up WiFi service")
 
         try:
+            # Stop mDNS service
+            self.device_config.stop_mdns_service()
+            
             # Stop hotspot if running
             if self.wifi_manager.is_hotspot_active():
                 await self.wifi_manager.stop_hotspot()
@@ -1151,16 +1266,16 @@ def main():
 
     parser.add_argument(
         "--ssid",
-        default="DistillerSetup",
-        help="Hotspot SSID (default: DistillerSetup)",
+        default=None,
+        help="Hotspot SSID (default: auto-generated with random suffix)",
     )
     parser.add_argument(
-        "--password", default="setup123", help="Hotspot password (default: setup123)"
+        "--password", default=None, help="Hotspot password (default: from device config)"
     )
     parser.add_argument(
         "--device-name",
-        default="Distiller",
-        help="Device name for display (default: Distiller)",
+        default=None,
+        help="Device name for display (default: auto-generated with random suffix)",
     )
     parser.add_argument(
         "--port", type=int, default=8080, help="Web server port (default: 8080)"

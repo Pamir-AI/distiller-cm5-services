@@ -6,6 +6,8 @@ A comprehensive WiFi setup and management service designed for embedded Linux de
 
 ### WiFi Management
 - **Automatic WiFi Setup**: Creates a hotspot when no connection is available
+- **Random Device Naming**: Each device gets unique ID to prevent conflicts (e.g., DistillerSetup-A4B2)
+- **mDNS Discovery**: Devices advertise themselves via Bonjour/Zeroconf for easy discovery
 - **Web-based Configuration**: User-friendly interface for network selection and password entry
 - **Connection Monitoring**: Automatic reconnection and health monitoring
 - **Network Scanning**: Real-time WiFi network discovery
@@ -54,10 +56,10 @@ sudo python3 distiller_wifi_service.py
 ### Basic Usage
 
 1. **Automatic Setup**: Service automatically starts hotspot mode if no WiFi connection
-2. **Connect to Hotspot**: Join "DistillerSetup" network (password: "setup123")
+2. **Connect to Hotspot**: Join "DistillerSetup-XXXX" network (password: "setup123") where XXXX is a unique suffix
 3. **Open Web Interface**: Visit the IP address shown on the e-ink display (typically 192.168.4.1:8080)
 4. **Configure WiFi**: Select network, enter password, and connect
-5. **Automatic Transition**: Service transitions to connected mode
+5. **Automatic Transition**: Service transitions to connected mode and becomes available via mDNS (e.g., distiller-xxxx.local)
 
 ## Configuration
 
